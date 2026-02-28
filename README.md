@@ -40,6 +40,11 @@ Docker-related environment variables:
 - `DOCKER_CMD` (default: `docker`)
 - `DOCKER_CONTAINER_PREFIX` (default: `funclaw`)
 - `DOCKER_RESTART_POLICY` (default: `unless-stopped`)
+- `DOCKER_GATEWAY_HOST_PORT` (default: `42617`)
+- `DOCKER_GATEWAY_CONTAINER_PORT` (default: `42617`)
+- `DOCKER_GATEWAY_HOST` (default: `0.0.0.0`)
+- `DOCKER_ALLOW_PUBLIC_BIND` (default: `true`)
+- `ZEROCLAW_API_KEY` (default: empty)
 - `DOCKER_STOP_TIMEOUT_SECONDS` (default: `20`)
 - `DOCKER_COMMAND_TIMEOUT_SECONDS` (default: `120`)
 

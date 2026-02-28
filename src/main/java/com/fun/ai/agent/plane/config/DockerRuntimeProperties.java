@@ -11,6 +11,11 @@ public class DockerRuntimeProperties {
     private String command = "docker";
     private String containerPrefix = "funclaw";
     private String restartPolicy = "unless-stopped";
+    private int gatewayHostPort = 42617;
+    private int gatewayContainerPort = 42617;
+    private String gatewayHost = "0.0.0.0";
+    private boolean allowPublicBind = true;
+    private String apiKey;
     private long stopTimeoutSeconds = 20;
     private long commandTimeoutSeconds = 120;
 
@@ -44,6 +49,46 @@ public class DockerRuntimeProperties {
 
     public void setRestartPolicy(String restartPolicy) {
         this.restartPolicy = restartPolicy;
+    }
+
+    public int getGatewayHostPort() {
+        return gatewayHostPort;
+    }
+
+    public void setGatewayHostPort(int gatewayHostPort) {
+        this.gatewayHostPort = gatewayHostPort;
+    }
+
+    public int getGatewayContainerPort() {
+        return gatewayContainerPort;
+    }
+
+    public void setGatewayContainerPort(int gatewayContainerPort) {
+        this.gatewayContainerPort = gatewayContainerPort;
+    }
+
+    public String getGatewayHost() {
+        return gatewayHost;
+    }
+
+    public void setGatewayHost(String gatewayHost) {
+        this.gatewayHost = gatewayHost;
+    }
+
+    public boolean isAllowPublicBind() {
+        return allowPublicBind;
+    }
+
+    public void setAllowPublicBind(boolean allowPublicBind) {
+        this.allowPublicBind = allowPublicBind;
+    }
+
+    public String getApiKey() {
+        return apiKey;
+    }
+
+    public void setApiKey(String apiKey) {
+        this.apiKey = apiKey;
     }
 
     public long getStopTimeoutSeconds() {

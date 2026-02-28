@@ -114,11 +114,26 @@ public class DockerRuntimeService {
         command.add(containerName);
         command.add("--label");
         command.add("fun.ai.instance-id=" + instanceId);
+        command.add("-p");
+        command.add(properties.getGatewayHostPort() + ":" + properties.getGatewayContainerPort());
+        command.add("-e");
+        command.add("ZEROCLAW_GATEWAY_PORT=" + properties.getGatewayContainerPort());
+        command.add("-e");
+        command.add("ZEROCLAW_ALLOW_PUBLIC_BIND=" + properties.isAllowPublicBind());
+        if (StringUtils.hasText(properties.getApiKey())) {
+            command.add("-e");
+            command.add("API_KEY=" + properties.getApiKey().trim());
+        }
         if (StringUtils.hasText(properties.getRestartPolicy())) {
             command.add("--restart");
             command.add(properties.getRestartPolicy().trim());
         }
         command.add(image);
+        command.add("gateway");
+        command.add("--host");
+        command.add(properties.getGatewayHost());
+        command.add("--port");
+        command.add(String.valueOf(properties.getGatewayContainerPort()));
         runDockerChecked(command, "failed to create container");
     }
 
