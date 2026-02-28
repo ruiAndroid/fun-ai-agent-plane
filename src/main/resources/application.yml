@@ -4,6 +4,15 @@ server:
 spring:
   application:
     name: fun-ai-agent-plane
+  datasource:
+    url: jdbc:postgresql://172.21.138.98:5432/fun_ai_agent
+    username: funai_agent
+    password: Ss123456!
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
 
 management:
   endpoints:
