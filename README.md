@@ -40,3 +40,4 @@ Optional environment variables:
 - `GIT_REMOTE` (default: `origin`)
 - `GIT_BRANCH` (default: `main`)
 - `HEALTH_URL` (default: `http://127.0.0.1:8090/internal/v1/health`)
+- `MVN_CMD` (default: `mvn`, Maven >= `3.6.3`)
