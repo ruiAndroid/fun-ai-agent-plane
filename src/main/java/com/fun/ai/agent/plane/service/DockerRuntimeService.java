@@ -29,21 +29,22 @@ public class DockerRuntimeService {
         }
 
         String image = resolveImage(payload);
+        Integer gatewayHostPort = resolveGatewayHostPort(payload);
         return switch (action) {
-            case START -> startInstance(instanceId, image);
+            case START -> startInstance(instanceId, image, gatewayHostPort);
             case STOP -> stopInstance(instanceId);
-            case RESTART, ROLLBACK -> restartInstance(instanceId, image);
+            case RESTART, ROLLBACK -> restartInstance(instanceId, image, gatewayHostPort);
             case DELETE -> deleteInstance(instanceId);
         };
     }
 
-    private String startInstance(UUID instanceId, String image) {
+    private String startInstance(UUID instanceId, String image, Integer gatewayHostPort) {
         String containerName = containerName(instanceId);
         if (!containerExists(containerName)) {
             if (!StringUtils.hasText(image)) {
                 throw new DockerOperationException("image is required to create container");
             }
-            createContainer(containerName, instanceId, image.trim());
+            createContainer(containerName, instanceId, image.trim(), gatewayHostPort);
         }
 
         if (containerRunning(containerName)) {
@@ -68,13 +69,13 @@ public class DockerRuntimeService {
         return "Container stopped: " + containerName;
     }
 
-    private String restartInstance(UUID instanceId, String image) {
+    private String restartInstance(UUID instanceId, String image, Integer gatewayHostPort) {
         String containerName = containerName(instanceId);
         if (!containerExists(containerName)) {
             if (!StringUtils.hasText(image)) {
                 throw new DockerOperationException("image is required to create container for restart");
             }
-            createContainer(containerName, instanceId, image.trim());
+            createContainer(containerName, instanceId, image.trim(), gatewayHostPort);
             runDockerChecked(List.of(properties.getCommand(), "start", containerName), "failed to start container");
             return "Container created and started: " + containerName;
         }
@@ -106,7 +107,12 @@ public class DockerRuntimeService {
         return "Container deleted: " + containerName;
     }
 
-    private void createContainer(String containerName, UUID instanceId, String image) {
+    private void createContainer(String containerName, UUID instanceId, String image, Integer gatewayHostPort) {
+        int hostPort = gatewayHostPort != null ? gatewayHostPort : properties.getGatewayHostPort();
+        if (hostPort <= 0 || hostPort > 65535) {
+            throw new DockerOperationException("invalid gateway host port: " + hostPort);
+        }
+
         List<String> command = new ArrayList<>();
         command.add(properties.getCommand());
         command.add("create");
@@ -115,7 +121,7 @@ public class DockerRuntimeService {
         command.add("--label");
         command.add("fun.ai.instance-id=" + instanceId);
         command.add("-p");
-        command.add(properties.getGatewayHostPort() + ":" + properties.getGatewayContainerPort());
+        command.add(hostPort + ":" + properties.getGatewayContainerPort());
         command.add("-e");
         command.add("ZEROCLAW_GATEWAY_PORT=" + properties.getGatewayContainerPort());
         command.add("-e");
@@ -189,6 +195,27 @@ public class DockerRuntimeService {
             return image;
         }
         return null;
+    }
+
+    private Integer resolveGatewayHostPort(Map<String, Object> payload) {
+        if (payload == null) {
+            return null;
+        }
+        Object rawGatewayHostPort = payload.get("gatewayHostPort");
+        if (rawGatewayHostPort == null) {
+            return null;
+        }
+        if (rawGatewayHostPort instanceof Number numberValue) {
+            return numberValue.intValue();
+        }
+        if (rawGatewayHostPort instanceof String stringValue && StringUtils.hasText(stringValue)) {
+            try {
+                return Integer.parseInt(stringValue.trim());
+            } catch (NumberFormatException ex) {
+                throw new DockerOperationException("invalid gateway host port: " + stringValue);
+            }
+        }
+        throw new DockerOperationException("invalid gateway host port payload");
     }
 
     private String containerName(UUID instanceId) {
