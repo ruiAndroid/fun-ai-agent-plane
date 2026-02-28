@@ -19,3 +19,12 @@ management:
     web:
       exposure:
         include: health,info
+
+app:
+  docker:
+    enabled: ${DOCKER_RUNTIME_ENABLED:true}
+    command: ${DOCKER_CMD:docker}
+    container-prefix: ${DOCKER_CONTAINER_PREFIX:funclaw}
+    restart-policy: ${DOCKER_RESTART_POLICY:unless-stopped}
+    stop-timeout-seconds: ${DOCKER_STOP_TIMEOUT_SECONDS:20}
+    command-timeout-seconds: ${DOCKER_COMMAND_TIMEOUT_SECONDS:120}

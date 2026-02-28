@@ -4,5 +4,6 @@ public enum CommandAction {
     START,
     STOP,
     RESTART,
-    ROLLBACK
+    ROLLBACK,
+    DELETE
 }

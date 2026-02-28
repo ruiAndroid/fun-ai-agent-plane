@@ -20,9 +20,28 @@ Default port: `8090`
 
 - `GET /internal/v1/health`
 - `POST /internal/v1/reconcile`
+- `DELETE /internal/v1/instances/{instanceId}`
 - `GET /internal/v1/tasks`
 
-Current implementation is an in-memory executor skeleton for bootstrap.
+Current implementation executes real Docker commands on host for:
+
+- `START`: create (if absent) + start container
+- `STOP`: stop container
+- `RESTART`/`ROLLBACK`: restart container (or create+start if absent)
+- `DELETE`: stop container gracefully, then remove container
+
+Container name pattern: `${DOCKER_CONTAINER_PREFIX}-${instanceId}` (default prefix: `funclaw`).
+
+Required: plane process user must be allowed to run Docker CLI.
+
+Docker-related environment variables:
+
+- `DOCKER_RUNTIME_ENABLED` (default: `true`)
+- `DOCKER_CMD` (default: `docker`)
+- `DOCKER_CONTAINER_PREFIX` (default: `funclaw`)
+- `DOCKER_RESTART_POLICY` (default: `unless-stopped`)
+- `DOCKER_STOP_TIMEOUT_SECONDS` (default: `20`)
+- `DOCKER_COMMAND_TIMEOUT_SECONDS` (default: `120`)
 
 ## Update Script
 
