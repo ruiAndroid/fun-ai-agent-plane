@@ -40,18 +40,27 @@ public class DockerRuntimeService {
 
     private String startInstance(UUID instanceId, String image, Integer gatewayHostPort) {
         String containerName = containerName(instanceId);
+        boolean createdNow = false;
         if (!containerExists(containerName)) {
             if (!StringUtils.hasText(image)) {
                 throw new DockerOperationException("image is required to create container");
             }
             createContainer(containerName, instanceId, image.trim(), gatewayHostPort);
+            createdNow = true;
         }
 
         if (containerRunning(containerName)) {
             return "Container already running: " + containerName;
         }
 
-        runDockerChecked(List.of(properties.getCommand(), "start", containerName), "failed to start container");
+        try {
+            runDockerChecked(List.of(properties.getCommand(), "start", containerName), "failed to start container");
+        } catch (DockerOperationException ex) {
+            if (createdNow) {
+                removeContainerQuietly(containerName);
+            }
+            throw ex;
+        }
         return "Container started: " + containerName;
     }
 
@@ -76,7 +85,12 @@ public class DockerRuntimeService {
                 throw new DockerOperationException("image is required to create container for restart");
             }
             createContainer(containerName, instanceId, image.trim(), gatewayHostPort);
-            runDockerChecked(List.of(properties.getCommand(), "start", containerName), "failed to start container");
+            try {
+                runDockerChecked(List.of(properties.getCommand(), "start", containerName), "failed to start container");
+            } catch (DockerOperationException ex) {
+                removeContainerQuietly(containerName);
+                throw ex;
+            }
             return "Container created and started: " + containerName;
         }
 
@@ -163,6 +177,10 @@ public class DockerRuntimeService {
         }
         String details = result.output.isBlank() ? "exit code " + result.exitCode : result.output.trim();
         throw new DockerOperationException(messagePrefix + ": " + details);
+    }
+
+    private void removeContainerQuietly(String containerName) {
+        runDocker(List.of(properties.getCommand(), "rm", containerName));
     }
 
     private CommandResult runDocker(List<String> command) {
