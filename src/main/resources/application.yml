@@ -5,9 +5,9 @@ spring:
   application:
     name: fun-ai-agent-plane
   datasource:
-    url: jdbc:postgresql://172.21.138.98:5432/fun_ai_agent
-    username: funai_agent
-    password: Ss123456!
+    url: "jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5432}/fun_ai_agent"
+    username: "${DB_USER:funai_agent}"
+    password: "${DB_PASSWORD:Ss123456!}"
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
