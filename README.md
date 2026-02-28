@@ -1,6 +1,6 @@
 # fun-ai-agent-plane
 
-Execution plane service for reconciling lobster instance commands.
+Execution plane service for reconciling claw instance commands.
 
 ## Tech Stack
 
