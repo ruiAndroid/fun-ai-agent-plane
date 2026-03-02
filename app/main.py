@@ -76,7 +76,16 @@ async def get_runtime_snapshot() -> dict:
                 "workflows": {
                     workflow_id: {
                         "name": workflow.name,
-                        "skill_id": workflow.skill_id,
+                        "steps": [
+                            {
+                                "step_id": step.step_id,
+                                "name": step.name,
+                                "skill_id": step.skill_id,
+                                "description": step.description,
+                                "config": step.config,
+                            }
+                            for step in workflow.steps
+                        ],
                         "model_profile": workflow.model_profile,
                         "description": workflow.description,
                         "config": workflow.config,

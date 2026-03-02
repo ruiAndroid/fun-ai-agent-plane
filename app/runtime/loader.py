@@ -1,8 +1,15 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
-from .types import AgentSpec, MCPServerSpec, ModelProfileSpec, SkillSpec, WorkflowSpec
+from .types import (
+    AgentSpec,
+    MCPServerSpec,
+    ModelProfileSpec,
+    SkillSpec,
+    WorkflowSpec,
+    WorkflowStepSpec,
+)
 
 
 def _iter_json_files(directory: Path) -> Iterable[Path]:
@@ -18,18 +25,69 @@ def _load_json(path: Path) -> dict:
         raise ValueError(f"JSON 格式非法: {path}: {exc}") from exc
 
 
-def _parse_workflow_config(raw_config: Any) -> Dict[str, str]:
-    if not isinstance(raw_config, dict):
+def _to_str_map(raw: Any) -> Dict[str, str]:
+    if not isinstance(raw, dict):
         return {}
-    return {str(key): str(value) for key, value in raw_config.items()}
+    return {str(k): str(v) for k, v in raw.items()}
+
+
+def _parse_steps(raw_steps: Any, workflow_id: str, file_path: Path) -> List[WorkflowStepSpec]:
+    if not isinstance(raw_steps, list):
+        raise ValueError(f"工作流 '{workflow_id}' 的 steps 必须是数组: {file_path}")
+    steps: List[WorkflowStepSpec] = []
+    for idx, step_raw in enumerate(raw_steps):
+        if not isinstance(step_raw, dict):
+            raise ValueError(f"工作流 '{workflow_id}' 的 step 项必须是对象: {file_path}")
+        step_id = str(step_raw.get("step_id", "")).strip() or f"{workflow_id}-step-{idx + 1}"
+        skill_id = str(step_raw.get("skill_id", "")).strip()
+        if not skill_id:
+            raise ValueError(f"工作流 '{workflow_id}' 的 step '{step_id}' 缺少 skill_id: {file_path}")
+        steps.append(
+            WorkflowStepSpec(
+                step_id=step_id,
+                name=str(step_raw.get("name", step_id)).strip() or step_id,
+                skill_id=skill_id,
+                description=str(step_raw.get("description", "")).strip(),
+                config=_to_str_map(step_raw.get("config")),
+            )
+        )
+    return steps
+
+
+def _parse_workflow_item(workflow_raw: dict, workflow_id: str, file_path: Path) -> WorkflowSpec:
+    # Backward compatibility: allow top-level skill_id and convert it to one-step workflow.
+    if isinstance(workflow_raw.get("steps"), list):
+        steps = _parse_steps(workflow_raw["steps"], workflow_id, file_path)
+    else:
+        legacy_skill_id = str(workflow_raw.get("skill_id", "")).strip()
+        if not legacy_skill_id:
+            raise ValueError(
+                f"工作流 '{workflow_id}' 必须配置 steps[]，或在兼容模式下配置 skill_id: {file_path}"
+            )
+        steps = [
+            WorkflowStepSpec(
+                step_id=f"{workflow_id}-step-1",
+                name="默认步骤",
+                skill_id=legacy_skill_id,
+            )
+        ]
+
+    return WorkflowSpec(
+        workflow_id=workflow_id,
+        name=str(workflow_raw.get("name", workflow_id)).strip() or workflow_id,
+        steps=steps,
+        model_profile=str(workflow_raw.get("model_profile", "")).strip() or None,
+        description=str(workflow_raw.get("description", "")).strip(),
+        config=_to_str_map(workflow_raw.get("config")),
+    )
 
 
 def _parse_workflows(payload: dict, file_path: Path) -> Tuple[Dict[str, WorkflowSpec], str]:
     workflows: Dict[str, WorkflowSpec] = {}
-
     raw_workflows = payload.get("workflows")
+
     if raw_workflows is None:
-        # 兼容旧格式：把 skills + default_model_profile 映射成 workflows。
+        # Legacy compatibility: map old `skills + default_model_profile` into one-step workflows.
         default_model_profile = str(payload.get("default_model_profile", "")).strip() or None
         for skill_item in payload.get("skills", []):
             skill_id = str(skill_item).strip()
@@ -39,7 +97,13 @@ def _parse_workflows(payload: dict, file_path: Path) -> Tuple[Dict[str, Workflow
             workflows[workflow_id] = WorkflowSpec(
                 workflow_id=workflow_id,
                 name=workflow_id,
-                skill_id=skill_id,
+                steps=[
+                    WorkflowStepSpec(
+                        step_id=f"{workflow_id}-step-1",
+                        name="默认步骤",
+                        skill_id=skill_id,
+                    )
+                ],
                 model_profile=default_model_profile,
             )
     elif isinstance(raw_workflows, list):
@@ -49,17 +113,7 @@ def _parse_workflows(payload: dict, file_path: Path) -> Tuple[Dict[str, Workflow
             workflow_id = str(workflow_raw.get("workflow_id", "")).strip()
             if not workflow_id:
                 raise ValueError(f"workflows 列表项缺少 workflow_id: {file_path}")
-            skill_id = str(workflow_raw.get("skill_id", "")).strip()
-            if not skill_id:
-                raise ValueError(f"工作流 '{workflow_id}' 缺少 skill_id: {file_path}")
-            workflows[workflow_id] = WorkflowSpec(
-                workflow_id=workflow_id,
-                name=str(workflow_raw.get("name", workflow_id)).strip() or workflow_id,
-                skill_id=skill_id,
-                model_profile=str(workflow_raw.get("model_profile", "")).strip() or None,
-                description=str(workflow_raw.get("description", "")).strip(),
-                config=_parse_workflow_config(workflow_raw.get("config")),
-            )
+            workflows[workflow_id] = _parse_workflow_item(workflow_raw, workflow_id, file_path)
     elif isinstance(raw_workflows, dict):
         for workflow_id, workflow_raw in raw_workflows.items():
             workflow_id = str(workflow_id).strip()
@@ -67,17 +121,7 @@ def _parse_workflows(payload: dict, file_path: Path) -> Tuple[Dict[str, Workflow
                 raise ValueError(f"workflows 键名不能为空: {file_path}")
             if not isinstance(workflow_raw, dict):
                 raise ValueError(f"工作流 '{workflow_id}' 必须是对象: {file_path}")
-            skill_id = str(workflow_raw.get("skill_id", "")).strip()
-            if not skill_id:
-                raise ValueError(f"工作流 '{workflow_id}' 缺少 skill_id: {file_path}")
-            workflows[workflow_id] = WorkflowSpec(
-                workflow_id=workflow_id,
-                name=str(workflow_raw.get("name", workflow_id)).strip() or workflow_id,
-                skill_id=skill_id,
-                model_profile=str(workflow_raw.get("model_profile", "")).strip() or None,
-                description=str(workflow_raw.get("description", "")).strip(),
-                config=_parse_workflow_config(workflow_raw.get("config")),
-            )
+            workflows[workflow_id] = _parse_workflow_item(workflow_raw, workflow_id, file_path)
     else:
         raise ValueError(f"workflows 必须是数组或对象: {file_path}")
 
@@ -97,17 +141,15 @@ def load_agents(directory: str) -> Dict[str, AgentSpec]:
     for file_path in _iter_json_files(root):
         payload = _load_json(file_path)
         if "prompt" in payload:
-            raise ValueError(
-                f"开发阶段 agent 配置不允许 prompt 字段: {file_path}"
-            )
+            raise ValueError(f"开发阶段 agent 配置不允许 prompt 字段: {file_path}")
         agent_id = str(payload.get("agent_id", "")).strip()
         if not agent_id:
             raise ValueError(f"缺少 agent_id: {file_path}")
         display_name = str(payload.get("display_name", agent_id)).strip() or agent_id
+        workflows, default_workflow_id = _parse_workflows(payload, file_path)
         mcp_servers = [
             str(item).strip() for item in payload.get("mcp_servers", []) if str(item).strip()
         ]
-        workflows, default_workflow_id = _parse_workflows(payload, file_path)
         metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
         agents[agent_id] = AgentSpec(
             agent_id=agent_id,
@@ -162,7 +204,7 @@ def load_mcp_servers(directory: str) -> Dict[str, MCPServerSpec]:
     return servers
 
 
-def _to_bool(value, default: bool = False) -> bool:
+def _to_bool(value: Any, default: bool = False) -> bool:
     if value is None:
         return default
     if isinstance(value, bool):

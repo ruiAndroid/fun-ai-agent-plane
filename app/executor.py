@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 from .config import Settings
 from .llm import LLMService
-from .runtime import AgentRuntimeRegistry, RuntimeBundle
+from .runtime import AgentRuntimeRegistry, RuntimeBundle, RuntimeStepBundle
 from .store import TaskRecord, TaskStore
 
 
@@ -128,7 +128,10 @@ class TaskExecutor:
                 "task_id": running.task_id,
                 "agent_id": runtime.agent.agent_id,
                 "workflow_id": runtime.workflow.workflow_id,
-                "skill_id": runtime.skill.skill_id,
+                "steps": [
+                    {"step_id": item.step.step_id, "skill_id": item.step.skill_id}
+                    for item in runtime.steps
+                ],
                 "mcp_servers": [server.server_id for server in runtime.mcp_servers],
                 "primary_model": runtime.primary_model.model_id if runtime.primary_model else None,
             },
@@ -161,52 +164,57 @@ class TaskExecutor:
             )
 
     async def _build_chunks(self, task_record: TaskRecord, runtime: RuntimeBundle) -> List[str]:
-        skill_id = runtime.skill.skill_id
-        if skill_id == "storyboard-episode-split":
-            text = self._build_storyboard_episode_plan(task_record.prompt, runtime.agent.display_name)
-            return [char for char in text]
-        if skill_id == "storyboard-extract-roles":
-            text = self._build_storyboard_role_extract(task_record.prompt, runtime.agent.display_name)
-            return [char for char in text]
+        outputs: List[str] = []
+        for runtime_step in runtime.steps:
+            step_text = await self._run_step(task_record, runtime, runtime_step)
+            outputs.append(step_text.strip())
 
-        llm_text = await self._try_generate_by_model(task_record, runtime)
+        if not outputs:
+            outputs = [f"[{runtime.agent.display_name}] 工作流未产出结果。"]
+        text = "\n\n".join(item for item in outputs if item)
+        return [char for char in text]
+
+    async def _run_step(
+        self, task_record: TaskRecord, runtime: RuntimeBundle, runtime_step: RuntimeStepBundle
+    ) -> str:
+        skill_id = runtime_step.skill.skill_id
+        if skill_id == "storyboard-episode-split":
+            return self._build_storyboard_episode_plan(task_record.prompt, runtime.agent.display_name)
+        if skill_id == "storyboard-extract-roles":
+            return self._build_storyboard_role_extract(task_record.prompt, runtime.agent.display_name)
+
+        llm_text = await self._try_generate_by_model(task_record, runtime, runtime_step)
         if llm_text is not None:
-            return [char for char in llm_text]
+            return llm_text
 
         reversed_words = list(reversed(task_record.prompt.split()))
         if not reversed_words:
             reversed_words = ["(空输入)"]
-
-        output = [
-            "[",
-            runtime.agent.display_name,
-            "] ",
-            f"工作流={runtime.workflow.workflow_id}，技能={runtime.skill.skill_id}。 ",
-            "处理后的输入：",
-            " ".join(reversed_words),
-            ". ",
-            f"MCP数量={len(runtime.mcp_servers)}。 ",
-            "并发安全执行完成。",
-        ]
-        text = "".join(output)
-        return [char for char in text]
+        return (
+            f"[{runtime.agent.display_name}] "
+            f"步骤={runtime_step.step.step_id}，技能={runtime_step.skill.skill_id}，"
+            f"回退输出：{' '.join(reversed_words)}"
+        )
 
     async def _try_generate_by_model(
-        self, task_record: TaskRecord, runtime: RuntimeBundle
+        self, task_record: TaskRecord, runtime: RuntimeBundle, runtime_step: RuntimeStepBundle
     ) -> Optional[str]:
         if runtime.primary_model is None:
             return None
         response = await self.llm_service.complete(
             runtime=runtime,
             prompt=task_record.prompt,
-            skill_prompt_override=task_record.skill_prompt_override,
+            skill_prompt_override=task_record.skill_prompt_override
+            or runtime_step.skill.prompt_template,
         )
-        return f"[{runtime.agent.display_name}] {response.text}"
+        return (
+            f"[{runtime.agent.display_name}] 步骤={runtime_step.step.step_id} "
+            f"技能={runtime_step.skill.skill_id}\n{response.text}"
+        )
 
     def _build_storyboard_role_extract(self, prompt: str, display_name: str) -> str:
         normalized = re.sub(r"[，。！？、；：,.!?;:()\[\]{}<>\"'`~@#$%^&*_+=/\\|-]+", " ", prompt)
         tokens = [token.strip() for token in normalized.split() if token.strip()]
-        # Very lightweight heuristic: prioritize title-like and repeated tokens.
         candidate_counts: Dict[str, int] = {}
         for token in tokens:
             if len(token) < 2 or len(token) > 20:
@@ -247,7 +255,7 @@ class TaskExecutor:
 
         for index, episode_units in enumerate(episodes, start=1):
             title = f"第 {index:02d} 集"
-            lines.append(f"{title}")
+            lines.append(title)
             lines.append(f"- 场景数量: {len(episode_units)}")
             lines.append(f"- 开场钩子: {self._unit_summary(episode_units[0])}")
             lines.append(f"- 核心冲突: {self._unit_summary(episode_units[len(episode_units) // 2])}")
@@ -267,7 +275,7 @@ class TaskExecutor:
             return []
 
         header_pattern = re.compile(
-            r"^(INT\.|EXT\.|SCENE\s+\d+|ACT\s+\d+|EP\s*\d+|第[一二三四五六七八九十0-9]+[集幕场])",
+            r"^(INT\.|EXT\.|SCENE\s+\d+|ACT\s+\d+|EP\s*\d+|第[\d一二三四五六七八九十百零]+[集幕场])",
             re.IGNORECASE,
         )
 

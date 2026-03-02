@@ -2,7 +2,16 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from .loader import load_agents, load_mcp_servers, load_model_profiles, load_skills
-from .types import AgentSpec, MCPServerSpec, ModelProfileSpec, RuntimeBundle, SkillSpec, WorkflowSpec
+from .types import (
+    AgentSpec,
+    MCPServerSpec,
+    ModelProfileSpec,
+    RuntimeBundle,
+    RuntimeStepBundle,
+    SkillSpec,
+    WorkflowSpec,
+    WorkflowStepSpec,
+)
 
 
 @dataclass(frozen=True)
@@ -49,7 +58,13 @@ class AgentRuntimeRegistry:
             default_workflow = WorkflowSpec(
                 workflow_id="default",
                 name="default",
-                skill_id="summarize-text",
+                steps=[
+                    WorkflowStepSpec(
+                        step_id="default-step-1",
+                        name="默认步骤",
+                        skill_id="summarize-text",
+                    )
+                ],
             )
             agent = AgentSpec(
                 agent_id=agent_id,
@@ -66,16 +81,19 @@ class AgentRuntimeRegistry:
 
         workflow = agent.workflows.get(selected_workflow_id)
         if workflow is None:
-            raise ValueError(
-                f"智能体 '{agent.agent_id}' 未找到工作流 '{selected_workflow_id}'。"
-            )
+            raise ValueError(f"智能体 '{agent.agent_id}' 未找到工作流 '{selected_workflow_id}'。")
+        if not workflow.steps:
+            raise ValueError(f"工作流 '{workflow.workflow_id}' 未配置步骤。")
 
-        skill = self._snapshot.skills.get(workflow.skill_id)
-        if skill is None:
-            raise ValueError(
-                f"智能体 '{agent.agent_id}' 的工作流 '{workflow.workflow_id}' 引用了未知技能 "
-                f"'{workflow.skill_id}'。"
-            )
+        resolved_steps: List[RuntimeStepBundle] = []
+        for step in workflow.steps:
+            skill = self._snapshot.skills.get(step.skill_id)
+            if skill is None:
+                raise ValueError(
+                    f"智能体 '{agent.agent_id}' 的工作流 '{workflow.workflow_id}' 的步骤 "
+                    f"'{step.step_id}' 引用了未知技能 '{step.skill_id}'。"
+                )
+            resolved_steps.append(RuntimeStepBundle(step=step, skill=skill))
 
         resolved_mcp: List[MCPServerSpec] = []
         for server_id in agent.mcp_servers:
@@ -95,7 +113,7 @@ class AgentRuntimeRegistry:
         return RuntimeBundle(
             agent=agent,
             workflow=workflow,
-            skill=skill,
+            steps=resolved_steps,
             mcp_servers=resolved_mcp,
             primary_model=primary_model,
         )

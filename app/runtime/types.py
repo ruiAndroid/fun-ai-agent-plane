@@ -3,10 +3,19 @@ from typing import Dict, List, Optional
 
 
 @dataclass(frozen=True)
+class WorkflowStepSpec:
+    step_id: str
+    name: str
+    skill_id: str
+    description: str = ""
+    config: Dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class WorkflowSpec:
     workflow_id: str
     name: str
-    skill_id: str
+    steps: List[WorkflowStepSpec] = field(default_factory=list)
     model_profile: Optional[str] = None
     description: str = ""
     config: Dict[str, str] = field(default_factory=dict)
@@ -54,9 +63,15 @@ class ModelProfileSpec:
 
 
 @dataclass(frozen=True)
+class RuntimeStepBundle:
+    step: WorkflowStepSpec
+    skill: SkillSpec
+
+
+@dataclass(frozen=True)
 class RuntimeBundle:
     agent: AgentSpec
     workflow: WorkflowSpec
-    skill: SkillSpec
+    steps: List[RuntimeStepBundle]
     mcp_servers: List[MCPServerSpec]
     primary_model: Optional[ModelProfileSpec]
