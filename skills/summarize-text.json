@@ -1,0 +1,5 @@
+{
+  "skill_id": "summarize-text",
+  "description": "Basic summarization capability.",
+  "version": "1.0.0"
+}

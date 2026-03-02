@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from .config import settings
 from .executor import QueueAtCapacityError, TaskExecutor
 from .models import CreateTaskRequest, TaskStatus
+from .runtime import AgentRuntimeRegistry
 from .store import TaskStore
 
 app = FastAPI(
@@ -15,7 +16,13 @@ app = FastAPI(
     description="Concurrent agent runtime plane with queue, worker pool, and SSE.",
 )
 store = TaskStore()
-executor = TaskExecutor(settings=settings, store=store)
+runtime_registry = AgentRuntimeRegistry(
+    agent_dir=settings.agent_dir,
+    skills_dir=settings.skills_dir,
+    mcp_dir=settings.mcp_dir,
+    enforce_agent_registry=settings.enforce_agent_registry,
+)
+executor = TaskExecutor(settings=settings, store=store, runtime_registry=runtime_registry)
 
 
 def _sse_message(data: str) -> str:
@@ -24,6 +31,7 @@ def _sse_message(data: str) -> str:
 
 @app.on_event("startup")
 async def startup() -> None:
+    runtime_registry.reload()
     await executor.start()
 
 
@@ -34,11 +42,28 @@ async def shutdown() -> None:
 
 @app.get("/health")
 async def health() -> dict:
+    snapshot = runtime_registry.snapshot()
     return {
         "status": "ok",
         "queue_size": executor.queue_size(),
         "workers": settings.worker_count,
         "global_limit": settings.max_global_concurrency,
+        "runtime": {
+            "agents": len(snapshot.agents),
+            "skills": len(snapshot.skills),
+            "mcp_servers": len(snapshot.mcp_servers),
+        },
+    }
+
+
+@app.get("/v1/runtime")
+async def get_runtime_snapshot() -> dict:
+    snapshot = runtime_registry.snapshot()
+    return {
+        "agents": sorted(snapshot.agents.keys()),
+        "skills": sorted(snapshot.skills.keys()),
+        "mcp_servers": sorted(snapshot.mcp_servers.keys()),
+        "enforce_agent_registry": settings.enforce_agent_registry,
     }
 
 
@@ -129,4 +154,3 @@ async def stream_task_events(task_id: str) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
-

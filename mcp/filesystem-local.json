@@ -1,0 +1,6 @@
+{
+  "server_id": "filesystem-local",
+  "transport": "stdio",
+  "endpoint": "npx -y @modelcontextprotocol/server-filesystem ./",
+  "description": "Local filesystem MCP server for development."
+}

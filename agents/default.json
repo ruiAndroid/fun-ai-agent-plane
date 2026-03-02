@@ -1,0 +1,14 @@
+{
+  "agent_id": "default-agent",
+  "display_name": "Default Agent",
+  "skills": [
+    "summarize-text"
+  ],
+  "mcp_servers": [
+    "filesystem-local"
+  ],
+  "metadata": {
+    "owner": "plane",
+    "tier": "base"
+  }
+}

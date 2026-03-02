@@ -15,6 +15,18 @@ def _read_int(name: str, default: int, minimum: int = 1) -> int:
     return parsed
 
 
+def _read_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    parsed = value.strip().lower()
+    if parsed in ("1", "true", "yes", "on"):
+        return True
+    if parsed in ("0", "false", "no", "off"):
+        return False
+    raise ValueError(f"{name} must be a boolean value")
+
+
 @dataclass(frozen=True)
 class Settings:
     host: str
@@ -26,6 +38,10 @@ class Settings:
     max_agent_concurrency: int
     token_delay_ms: int
     heartbeat_seconds: int
+    agent_dir: str
+    skills_dir: str
+    mcp_dir: str
+    enforce_agent_registry: bool
 
 
 def load_settings() -> Settings:
@@ -39,8 +55,11 @@ def load_settings() -> Settings:
         max_agent_concurrency=_read_int("PLANE_MAX_AGENT_CONCURRENCY", 8, minimum=1),
         token_delay_ms=_read_int("PLANE_TOKEN_DELAY_MS", 80, minimum=1),
         heartbeat_seconds=_read_int("PLANE_HEARTBEAT_SECONDS", 15, minimum=1),
+        agent_dir=os.getenv("PLANE_AGENT_DIR", "./agents"),
+        skills_dir=os.getenv("PLANE_SKILLS_DIR", "./skills"),
+        mcp_dir=os.getenv("PLANE_MCP_DIR", "./mcp"),
+        enforce_agent_registry=_read_bool("PLANE_ENFORCE_AGENT_REGISTRY", False),
     )
 
 
 settings = load_settings()
-

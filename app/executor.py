@@ -2,6 +2,7 @@ import asyncio
 from typing import Dict, List, Optional
 
 from .config import Settings
+from .runtime import AgentRuntimeRegistry, RuntimeBundle
 from .store import TaskRecord, TaskStore
 
 
@@ -10,9 +11,10 @@ class QueueAtCapacityError(Exception):
 
 
 class TaskExecutor:
-    def __init__(self, settings: Settings, store: TaskStore) -> None:
+    def __init__(self, settings: Settings, store: TaskStore, runtime_registry: AgentRuntimeRegistry) -> None:
         self.settings = settings
         self.store = store
+        self.runtime_registry = runtime_registry
         self.queue: Optional[asyncio.Queue] = None
         self.global_semaphore: Optional[asyncio.Semaphore] = None
         self._tenant_limiters: Dict[str, asyncio.Semaphore] = {}
@@ -109,7 +111,19 @@ class TaskExecutor:
             return
         await self.store.publish(running.task_id, "task_running", running.to_view().to_dict())
 
-        chunks = self._build_chunks(running)
+        runtime = self.runtime_registry.resolve(running.agent_id)
+        await self.store.publish(
+            running.task_id,
+            "runtime_resolved",
+            {
+                "task_id": running.task_id,
+                "agent_id": runtime.agent.agent_id,
+                "skills": [skill.skill_id for skill in runtime.skills],
+                "mcp_servers": [server.server_id for server in runtime.mcp_servers],
+            },
+        )
+
+        chunks = self._build_chunks(running, runtime)
         for chunk in chunks:
             if await self.store.is_cancel_requested(running.task_id):
                 canceled = await self.store.set_canceled(running.task_id)
@@ -135,18 +149,19 @@ class TaskExecutor:
                 succeeded.task_id, "task_succeeded", succeeded.to_view().to_dict()
             )
 
-    def _build_chunks(self, task_record: TaskRecord) -> List[str]:
+    def _build_chunks(self, task_record: TaskRecord, runtime: RuntimeBundle) -> List[str]:
         reversed_words = list(reversed(task_record.prompt.split()))
         if not reversed_words:
             reversed_words = ["(empty)"]
 
         output = [
             "[",
-            task_record.agent_id,
+            runtime.agent.display_name,
             "] ",
             "processed prompt: ",
             " ".join(reversed_words),
             ". ",
+            f"skills={len(runtime.skills)}, mcp={len(runtime.mcp_servers)}. ",
             "concurrency-safe run completed.",
         ]
         text = "".join(output)
