@@ -36,6 +36,27 @@ python_is_supported() {
   [[ "${major}" -gt 3 ]] || ([[ "${major}" -eq 3 ]] && [[ "${minor}" -ge 8 ]])
 }
 
+dump_python_candidates() {
+  local candidates=(
+    python3.12 python3.11 python3.10 python3.9 python3.8 python3 python
+    /usr/local/bin/python3.12 /usr/local/bin/python3.11 /usr/local/bin/python3.10 /usr/local/bin/python3.9 /usr/local/bin/python3.8
+    /usr/bin/python3.12 /usr/bin/python3.11 /usr/bin/python3.10 /usr/bin/python3.9 /usr/bin/python3.8
+  )
+  local c
+  echo "Detected Python candidates:" >&2
+  for c in "${candidates[@]}"; do
+    if [[ "${c}" = /* ]]; then
+      if [[ -x "${c}" ]]; then
+        echo "  ${c}: $("${c}" -V 2>&1 || true)" >&2
+      fi
+    elif command -v "${c}" >/dev/null 2>&1; then
+      local path
+      path="$(command -v "${c}")"
+      echo "  ${c}: ${path} ($("${c}" -V 2>&1 || true))" >&2
+    fi
+  done
+}
+
 resolve_python_bin() {
   if [[ -n "${PYTHON_BIN}" ]]; then
     require_cmd "${PYTHON_BIN}"
@@ -43,16 +64,61 @@ resolve_python_bin() {
     return
   fi
 
-  local candidates=(python3.11 python3.10 python3.9 python3.8 python3 python)
+  # Non-login/root shells sometimes miss /usr/local/bin in PATH.
+  # Probe both command names and common absolute paths.
+  local candidates=(
+    python3.12 python3.11 python3.10 python3.9 python3.8 python3 python
+    /usr/local/bin/python3.12 /usr/local/bin/python3.11 /usr/local/bin/python3.10 /usr/local/bin/python3.9 /usr/local/bin/python3.8
+    /usr/bin/python3.12 /usr/bin/python3.11 /usr/bin/python3.10 /usr/bin/python3.9 /usr/bin/python3.8
+  )
   local c
   for c in "${candidates[@]}"; do
-    if command -v "${c}" >/dev/null 2>&1 && python_is_supported "${c}"; then
-      PYTHON_BIN="${c}"
-      return
+    if [[ "${c}" = /* ]]; then
+      if [[ -x "${c}" ]] && python_is_supported "${c}"; then
+        PYTHON_BIN="${c}"
+        return
+      fi
+    else
+      if command -v "${c}" >/dev/null 2>&1 && python_is_supported "${c}"; then
+        PYTHON_BIN="${c}"
+        return
+      fi
     fi
   done
 
-  fail "No supported Python found. Install Python >= 3.8 and rerun with PYTHON_BIN=/path/to/python."
+  dump_python_candidates
+  fail "No supported Python found. Install Python >= 3.8 and rerun with PYTHON_BIN=/path/to/python. Current PATH=${PATH}"
+}
+
+ensure_venv_python() {
+  local target_major_minor
+  target_major_minor="$(python_major_minor "${PYTHON_BIN}")"
+
+  if [[ "${RECREATE_VENV}" == "true" ]]; then
+    echo "RECREATE_VENV=true, removing existing .venv"
+    rm -rf .venv
+  fi
+
+  if [[ -d ".venv" ]]; then
+    if [[ ! -x ".venv/bin/python" ]]; then
+      echo "Existing .venv is broken (missing .venv/bin/python), recreating"
+      rm -rf .venv
+    else
+      local venv_major_minor
+      venv_major_minor="$(python_major_minor ".venv/bin/python" || true)"
+      if [[ -z "${venv_major_minor}" ]] || ! python_is_supported ".venv/bin/python"; then
+        echo "Existing .venv Python is unsupported (${venv_major_minor:-unknown}), recreating with ${target_major_minor}"
+        rm -rf .venv
+      elif [[ "${venv_major_minor}" != "${target_major_minor}" ]]; then
+        echo "Existing .venv Python is ${venv_major_minor}, target is ${target_major_minor}; recreating"
+        rm -rf .venv
+      fi
+    fi
+  fi
+
+  if [[ ! -d ".venv" ]]; then
+    "${PYTHON_BIN}" -m venv .venv
+  fi
 }
 
 if [[ ! -d "${APP_DIR}" ]]; then
@@ -76,15 +142,10 @@ git checkout "${GIT_BRANCH}"
 git pull --ff-only "${GIT_REMOTE}" "${GIT_BRANCH}"
 
 echo "[2/5] Sync Python venv and dependencies"
-if [[ "${RECREATE_VENV}" == "true" ]]; then
-  rm -rf .venv
-fi
-if [[ ! -d ".venv" ]]; then
-  "${PYTHON_BIN}" -m venv .venv
-fi
-.venv/bin/pip install --upgrade pip
+ensure_venv_python
+.venv/bin/python -m pip install --upgrade pip
 # shellcheck disable=SC2086
-.venv/bin/pip install ${PIP_EXTRA_ARGS} -r requirements.txt
+.venv/bin/python -m pip install ${PIP_EXTRA_ARGS} -r requirements.txt
 
 echo "[3/5] Restart service ${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
