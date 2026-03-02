@@ -37,6 +37,8 @@ class TaskStatus(str, Enum):
 class CreateTaskRequest(ModelCompat):
     tenant_id: str = Field(min_length=1, max_length=128)
     agent_id: str = Field(min_length=1, max_length=128)
+    workflow_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    skill_prompt_override: Optional[str] = Field(default=None, max_length=12000)
     prompt: str = Field(min_length=1, max_length=6000)
     idempotency_key: Optional[str] = Field(default=None, max_length=128)
 
@@ -45,6 +47,7 @@ class TaskView(ModelCompat):
     task_id: str
     tenant_id: str
     agent_id: str
+    workflow_id: Optional[str]
     status: TaskStatus
     output: str
     error: Optional[str]
@@ -57,4 +60,3 @@ class TaskEvent(ModelCompat):
     event_type: str
     payload: Dict[str, Any]
     timestamp: str = Field(default_factory=utc_now_iso)
-

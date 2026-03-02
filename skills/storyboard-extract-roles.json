@@ -1,0 +1,6 @@
+{
+  "skill_id": "storyboard-extract-roles",
+  "description": "Extract characters and role candidates from screenplay.",
+  "prompt_template": "Extract the core roles from the screenplay. Return role names and short role summaries.",
+  "version": "1.0.0"
+}

@@ -41,7 +41,9 @@ class Settings:
     agent_dir: str
     skills_dir: str
     mcp_dir: str
+    model_dir: str
     enforce_agent_registry: bool
+    llm_execution_mode: str
 
 
 def load_settings() -> Settings:
@@ -58,7 +60,9 @@ def load_settings() -> Settings:
         agent_dir=os.getenv("PLANE_AGENT_DIR", "./agents"),
         skills_dir=os.getenv("PLANE_SKILLS_DIR", "./skills"),
         mcp_dir=os.getenv("PLANE_MCP_DIR", "./mcp"),
+        model_dir=os.getenv("PLANE_MODEL_DIR", "./models"),
         enforce_agent_registry=_read_bool("PLANE_ENFORCE_AGENT_REGISTRY", False),
+        llm_execution_mode=os.getenv("PLANE_LLM_EXECUTION_MODE", "off"),
     )
 
 

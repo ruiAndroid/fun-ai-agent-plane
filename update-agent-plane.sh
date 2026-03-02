@@ -14,12 +14,15 @@ RECREATE_VENV="${RECREATE_VENV:-false}"
 ENABLE_AGENT_SYNC="${ENABLE_AGENT_SYNC:-true}"
 ENABLE_SKILLS_SYNC="${ENABLE_SKILLS_SYNC:-false}"
 ENABLE_MCP_SYNC="${ENABLE_MCP_SYNC:-false}"
+ENABLE_MODEL_SYNC="${ENABLE_MODEL_SYNC:-false}"
 AGENT_SYNC_CMD="${AGENT_SYNC_CMD:-}"
 SKILLS_SYNC_CMD="${SKILLS_SYNC_CMD:-}"
 MCP_SYNC_CMD="${MCP_SYNC_CMD:-}"
+MODEL_SYNC_CMD="${MODEL_SYNC_CMD:-}"
 AGENT_SYNC_SCRIPT="${AGENT_SYNC_SCRIPT:-./deploy-hooks/agent-sync.sh}"
 SKILLS_SYNC_SCRIPT="${SKILLS_SYNC_SCRIPT:-./deploy-hooks/skills-sync.sh}"
 MCP_SYNC_SCRIPT="${MCP_SYNC_SCRIPT:-./deploy-hooks/mcp-sync.sh}"
+MODEL_SYNC_SCRIPT="${MODEL_SYNC_SCRIPT:-./deploy-hooks/model-sync.sh}"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -185,29 +188,32 @@ git fetch "${GIT_REMOTE}" "${GIT_BRANCH}"
 git checkout "${GIT_BRANCH}"
 git pull --ff-only "${GIT_REMOTE}" "${GIT_BRANCH}"
 
-echo "[2/8] Sync Python venv and dependencies"
+echo "[2/9] Sync Python venv and dependencies"
 ensure_venv_python
 .venv/bin/python -m pip install --upgrade pip
 # shellcheck disable=SC2086
 .venv/bin/python -m pip install ${PIP_EXTRA_ARGS} -r requirements.txt
 
-echo "[3/8] Sync agent assets/config"
+echo "[3/9] Sync agent assets/config"
 run_sync_step "agent" "${ENABLE_AGENT_SYNC}" "${AGENT_SYNC_CMD}" "${AGENT_SYNC_SCRIPT}"
 
-echo "[4/8] Sync skills"
+echo "[4/9] Sync skills"
 run_sync_step "skills" "${ENABLE_SKILLS_SYNC}" "${SKILLS_SYNC_CMD}" "${SKILLS_SYNC_SCRIPT}"
 
-echo "[5/8] Sync MCP"
+echo "[5/9] Sync MCP"
 run_sync_step "mcp" "${ENABLE_MCP_SYNC}" "${MCP_SYNC_CMD}" "${MCP_SYNC_SCRIPT}"
 
-echo "[6/8] Restart service ${SERVICE_NAME}"
+echo "[6/9] Sync model profiles"
+run_sync_step "model" "${ENABLE_MODEL_SYNC}" "${MODEL_SYNC_CMD}" "${MODEL_SYNC_SCRIPT}"
+
+echo "[7/9] Restart service ${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
 
-echo "[7/8] Health check ${HEALTH_URL}"
+echo "[8/9] Health check ${HEALTH_URL}"
 for ((i=1; i<=HEALTH_RETRIES; i++)); do
   if curl -fsS "${HEALTH_URL}" >/dev/null 2>&1; then
     echo "SUCCESS: ${SERVICE_NAME} is healthy"
-    echo "[8/8] Show service status"
+    echo "[9/9] Show service status"
     systemctl --no-pager --full status "${SERVICE_NAME}" | head -n 20
     exit 0
   fi

@@ -10,8 +10,10 @@ class TaskRecord:
     task_id: str
     tenant_id: str
     agent_id: str
+    workflow_id: Optional[str]
     prompt: str
     status: TaskStatus
+    skill_prompt_override: Optional[str] = None
     output_chunks: List[str] = field(default_factory=list)
     error: Optional[str] = None
     idempotency_key: Optional[str] = None
@@ -24,6 +26,7 @@ class TaskRecord:
             task_id=self.task_id,
             tenant_id=self.tenant_id,
             agent_id=self.agent_id,
+            workflow_id=self.workflow_id,
             status=self.status,
             output="".join(self.output_chunks),
             error=self.error,
@@ -40,16 +43,34 @@ class TaskStore:
         self._subscribers: Dict[str, Set[asyncio.Queue]] = {}
         self._lock = asyncio.Lock()
 
+    def _idempotency_scope_key(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        workflow_id: Optional[str],
+        idempotency_key: str,
+    ) -> str:
+        workflow = (workflow_id or "").strip() or "__default__"
+        return f"{tenant_id}::{agent_id}::{workflow}::{idempotency_key}"
+
     async def create_or_get_task(
         self,
         tenant_id: str,
         agent_id: str,
+        workflow_id: Optional[str],
         prompt: str,
+        skill_prompt_override: Optional[str],
         idempotency_key: Optional[str],
     ) -> Tuple[TaskRecord, bool]:
         async with self._lock:
             if idempotency_key:
-                existing_task_id = self._idempotency_index.get(idempotency_key)
+                scoped_key = self._idempotency_scope_key(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    workflow_id=workflow_id,
+                    idempotency_key=idempotency_key,
+                )
+                existing_task_id = self._idempotency_index.get(scoped_key)
                 if existing_task_id:
                     existing = self._tasks.get(existing_task_id)
                     if existing:
@@ -60,13 +81,21 @@ class TaskStore:
                 task_id=task_id,
                 tenant_id=tenant_id,
                 agent_id=agent_id,
+                workflow_id=workflow_id,
                 prompt=prompt,
+                skill_prompt_override=skill_prompt_override,
                 status=TaskStatus.QUEUED,
                 idempotency_key=idempotency_key,
             )
             self._tasks[task_id] = created
             if idempotency_key:
-                self._idempotency_index[idempotency_key] = task_id
+                scoped_key = self._idempotency_scope_key(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    workflow_id=workflow_id,
+                    idempotency_key=idempotency_key,
+                )
+                self._idempotency_index[scoped_key] = task_id
             return created, True
 
     async def delete_task(self, task_id: str) -> None:
@@ -74,7 +103,13 @@ class TaskStore:
             task = self._tasks.pop(task_id, None)
             self._subscribers.pop(task_id, None)
             if task and task.idempotency_key:
-                self._idempotency_index.pop(task.idempotency_key, None)
+                scoped_key = self._idempotency_scope_key(
+                    tenant_id=task.tenant_id,
+                    agent_id=task.agent_id,
+                    workflow_id=task.workflow_id,
+                    idempotency_key=task.idempotency_key,
+                )
+                self._idempotency_index.pop(scoped_key, None)
 
     async def get_task(self, task_id: str) -> Optional[TaskRecord]:
         async with self._lock:
@@ -169,4 +204,3 @@ class TaskStore:
                 queue.put_nowait(message)
             except asyncio.QueueFull:
                 continue
-

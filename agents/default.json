@@ -1,8 +1,15 @@
 {
   "agent_id": "default-agent",
   "display_name": "Default Agent",
-  "skills": [
-    "summarize-text"
+  "default_workflow_id": "summarize",
+  "workflows": [
+    {
+      "workflow_id": "summarize",
+      "name": "Summarize Text",
+      "skill_id": "summarize-text",
+      "model_profile": "mock-default",
+      "description": "Generic text summarization workflow."
+    }
   ],
   "mcp_servers": [
     "filesystem-local"

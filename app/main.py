@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 
 from .config import settings
 from .executor import QueueAtCapacityError, TaskExecutor
+from .llm import LLMService
 from .models import CreateTaskRequest, TaskStatus
 from .runtime import AgentRuntimeRegistry
 from .store import TaskStore
@@ -20,9 +21,16 @@ runtime_registry = AgentRuntimeRegistry(
     agent_dir=settings.agent_dir,
     skills_dir=settings.skills_dir,
     mcp_dir=settings.mcp_dir,
+    model_dir=settings.model_dir,
     enforce_agent_registry=settings.enforce_agent_registry,
 )
-executor = TaskExecutor(settings=settings, store=store, runtime_registry=runtime_registry)
+llm_service = LLMService(execution_mode=settings.llm_execution_mode)
+executor = TaskExecutor(
+    settings=settings,
+    store=store,
+    runtime_registry=runtime_registry,
+    llm_service=llm_service,
+)
 
 
 def _sse_message(data: str) -> str:
@@ -52,6 +60,7 @@ async def health() -> dict:
             "agents": len(snapshot.agents),
             "skills": len(snapshot.skills),
             "mcp_servers": len(snapshot.mcp_servers),
+            "model_profiles": len(snapshot.model_profiles),
         },
     }
 
@@ -60,10 +69,28 @@ async def health() -> dict:
 async def get_runtime_snapshot() -> dict:
     snapshot = runtime_registry.snapshot()
     return {
-        "agents": sorted(snapshot.agents.keys()),
+        "agents": {
+            agent_id: {
+                "display_name": agent.display_name,
+                "default_workflow_id": agent.default_workflow_id,
+                "workflows": {
+                    workflow_id: {
+                        "name": workflow.name,
+                        "skill_id": workflow.skill_id,
+                        "model_profile": workflow.model_profile,
+                        "description": workflow.description,
+                        "config": workflow.config,
+                    }
+                    for workflow_id, workflow in sorted(agent.workflows.items())
+                },
+            }
+            for agent_id, agent in sorted(snapshot.agents.items())
+        },
         "skills": sorted(snapshot.skills.keys()),
         "mcp_servers": sorted(snapshot.mcp_servers.keys()),
+        "model_profiles": sorted(snapshot.model_profiles.keys()),
         "enforce_agent_registry": settings.enforce_agent_registry,
+        "llm_execution_mode": settings.llm_execution_mode,
     }
 
 
@@ -72,7 +99,9 @@ async def create_task(request: CreateTaskRequest) -> dict:
     task_record, created = await store.create_or_get_task(
         tenant_id=request.tenant_id,
         agent_id=request.agent_id,
+        workflow_id=request.workflow_id,
         prompt=request.prompt,
+        skill_prompt_override=request.skill_prompt_override,
         idempotency_key=request.idempotency_key,
     )
     if not created:

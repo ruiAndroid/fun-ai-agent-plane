@@ -1,0 +1,26 @@
+{
+  "agent_id": "dreamworks-storyboard",
+  "display_name": "DreamWorks Storyboard Agent",
+  "default_workflow_id": "episode-split",
+  "workflows": [
+    {
+      "workflow_id": "episode-split",
+      "name": "Script To Episodes",
+      "skill_id": "storyboard-episode-split",
+      "model_profile": "mock-default",
+      "description": "Split screenplay into episode storyboard plan."
+    },
+    {
+      "workflow_id": "extract-roles",
+      "name": "Extract Episode Roles",
+      "skill_id": "storyboard-extract-roles",
+      "model_profile": "openai-gpt-4o-mini",
+      "description": "Extract key characters and role candidates from screenplay text."
+    }
+  ],
+  "mcp_servers": [],
+  "metadata": {
+    "owner": "dreamworks",
+    "domain": "storyboard"
+  }
+}

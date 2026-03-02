@@ -1,0 +1,10 @@
+{
+  "model_id": "mock-default",
+  "provider": "mock",
+  "model_name": "mock-local-v1",
+  "timeout_seconds": 5,
+  "temperature": 0.2,
+  "supports_tools": false,
+  "supports_vision": false,
+  "cost_tier": "dev"
+}

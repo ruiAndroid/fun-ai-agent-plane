@@ -1,7 +1,9 @@
 import asyncio
+import re
 from typing import Dict, List, Optional
 
 from .config import Settings
+from .llm import LLMService
 from .runtime import AgentRuntimeRegistry, RuntimeBundle
 from .store import TaskRecord, TaskStore
 
@@ -11,10 +13,17 @@ class QueueAtCapacityError(Exception):
 
 
 class TaskExecutor:
-    def __init__(self, settings: Settings, store: TaskStore, runtime_registry: AgentRuntimeRegistry) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        store: TaskStore,
+        runtime_registry: AgentRuntimeRegistry,
+        llm_service: LLMService,
+    ) -> None:
         self.settings = settings
         self.store = store
         self.runtime_registry = runtime_registry
+        self.llm_service = llm_service
         self.queue: Optional[asyncio.Queue] = None
         self.global_semaphore: Optional[asyncio.Semaphore] = None
         self._tenant_limiters: Dict[str, asyncio.Semaphore] = {}
@@ -111,19 +120,21 @@ class TaskExecutor:
             return
         await self.store.publish(running.task_id, "task_running", running.to_view().to_dict())
 
-        runtime = self.runtime_registry.resolve(running.agent_id)
+        runtime = self.runtime_registry.resolve(running.agent_id, running.workflow_id)
         await self.store.publish(
             running.task_id,
             "runtime_resolved",
             {
                 "task_id": running.task_id,
                 "agent_id": runtime.agent.agent_id,
-                "skills": [skill.skill_id for skill in runtime.skills],
+                "workflow_id": runtime.workflow.workflow_id,
+                "skill_id": runtime.skill.skill_id,
                 "mcp_servers": [server.server_id for server in runtime.mcp_servers],
+                "primary_model": runtime.primary_model.model_id if runtime.primary_model else None,
             },
         )
 
-        chunks = self._build_chunks(running, runtime)
+        chunks = await self._build_chunks(running, runtime)
         for chunk in chunks:
             if await self.store.is_cancel_requested(running.task_id):
                 canceled = await self.store.set_canceled(running.task_id)
@@ -149,7 +160,19 @@ class TaskExecutor:
                 succeeded.task_id, "task_succeeded", succeeded.to_view().to_dict()
             )
 
-    def _build_chunks(self, task_record: TaskRecord, runtime: RuntimeBundle) -> List[str]:
+    async def _build_chunks(self, task_record: TaskRecord, runtime: RuntimeBundle) -> List[str]:
+        skill_id = runtime.skill.skill_id
+        if skill_id == "storyboard-episode-split":
+            text = self._build_storyboard_episode_plan(task_record.prompt, runtime.agent.display_name)
+            return [char for char in text]
+        if skill_id == "storyboard-extract-roles":
+            text = self._build_storyboard_role_extract(task_record.prompt, runtime.agent.display_name)
+            return [char for char in text]
+
+        llm_text = await self._try_generate_by_model(task_record, runtime)
+        if llm_text is not None:
+            return [char for char in llm_text]
+
         reversed_words = list(reversed(task_record.prompt.split()))
         if not reversed_words:
             reversed_words = ["(empty)"]
@@ -158,11 +181,141 @@ class TaskExecutor:
             "[",
             runtime.agent.display_name,
             "] ",
+            f"workflow={runtime.workflow.workflow_id}, skill={runtime.skill.skill_id}. ",
             "processed prompt: ",
             " ".join(reversed_words),
             ". ",
-            f"skills={len(runtime.skills)}, mcp={len(runtime.mcp_servers)}. ",
+            f"mcp={len(runtime.mcp_servers)}. ",
             "concurrency-safe run completed.",
         ]
         text = "".join(output)
         return [char for char in text]
+
+    async def _try_generate_by_model(
+        self, task_record: TaskRecord, runtime: RuntimeBundle
+    ) -> Optional[str]:
+        if runtime.primary_model is None:
+            return None
+        response = await self.llm_service.complete(
+            runtime=runtime,
+            prompt=task_record.prompt,
+            skill_prompt_override=task_record.skill_prompt_override,
+        )
+        return f"[{runtime.agent.display_name}] {response.text}"
+
+    def _build_storyboard_role_extract(self, prompt: str, display_name: str) -> str:
+        normalized = re.sub(r"[，。！？、；：,.!?;:()\[\]{}<>\"'`~@#$%^&*_+=/\\|-]+", " ", prompt)
+        tokens = [token.strip() for token in normalized.split() if token.strip()]
+        # Very lightweight heuristic: prioritize title-like and repeated tokens.
+        candidate_counts: Dict[str, int] = {}
+        for token in tokens:
+            if len(token) < 2 or len(token) > 20:
+                continue
+            if token.lower() in {"int", "ext", "scene", "act", "ep"}:
+                continue
+            candidate_counts[token] = candidate_counts.get(token, 0) + 1
+        ranked = sorted(candidate_counts.items(), key=lambda item: (-item[1], item[0]))
+        top_roles = [name for name, _ in ranked[:12]]
+
+        if not top_roles:
+            return (
+                f"[{display_name}] role extraction result\n"
+                "No obvious role names were found. Provide more character-rich script text."
+            )
+
+        lines = [f"[{display_name}] role extraction result", f"role_count={len(top_roles)}", ""]
+        for idx, role_name in enumerate(top_roles, start=1):
+            lines.append(f"{idx}. {role_name}")
+        return "\n".join(lines).strip()
+
+    def _build_storyboard_episode_plan(self, prompt: str, display_name: str) -> str:
+        units = self._split_script_units(prompt)
+        if not units:
+            return (
+                f"[{display_name}] storyboard episode split result\n"
+                "No valid script content found. Please provide screenplay scenes or paragraphs."
+            )
+
+        episode_count = self._suggest_episode_count(len(units))
+        episodes = self._allocate_units_to_episodes(units, episode_count)
+
+        lines: List[str] = []
+        lines.append(f"[{display_name}] storyboard episode split result")
+        lines.append(f"total_script_units={len(units)}")
+        lines.append(f"suggested_episodes={len(episodes)}")
+        lines.append("")
+
+        for index, episode_units in enumerate(episodes, start=1):
+            title = f"Episode {index:02d}"
+            lines.append(f"{title}")
+            lines.append(f"- scene_count: {len(episode_units)}")
+            lines.append(f"- opening_hook: {self._unit_summary(episode_units[0])}")
+            lines.append(f"- core_conflict: {self._unit_summary(episode_units[len(episode_units) // 2])}")
+            lines.append(f"- ending_cliffhanger: {self._unit_summary(episode_units[-1])}")
+            lines.append("- scenes:")
+            for scene_idx, scene in enumerate(episode_units, start=1):
+                lines.append(f"  {scene_idx}. {self._unit_summary(scene, limit=90)}")
+            lines.append("")
+
+        lines.append("split_strategy=scene-header-aware + balanced-allocation")
+        return "\n".join(lines).strip()
+
+    def _split_script_units(self, prompt: str) -> List[str]:
+        lines = [line.strip() for line in prompt.splitlines()]
+        lines = [line for line in lines if line]
+        if not lines:
+            return []
+
+        header_pattern = re.compile(
+            r"^(INT\.|EXT\.|SCENE\s+\d+|ACT\s+\d+|EP\s*\d+|第[一二三四五六七八九十0-9]+[集幕场])",
+            re.IGNORECASE,
+        )
+
+        units: List[str] = []
+        current: List[str] = []
+        for line in lines:
+            if header_pattern.match(line) and current:
+                units.append(" ".join(current).strip())
+                current = [line]
+            else:
+                current.append(line)
+
+        if current:
+            units.append(" ".join(current).strip())
+
+        if len(units) <= 1:
+            paragraphs = [part.strip() for part in re.split(r"\n\s*\n", prompt) if part.strip()]
+            if len(paragraphs) > 1:
+                return paragraphs
+
+        return units
+
+    def _suggest_episode_count(self, unit_count: int) -> int:
+        if unit_count <= 4:
+            return 1
+        if unit_count <= 10:
+            return 2
+        if unit_count <= 18:
+            return 3
+        if unit_count <= 28:
+            return 4
+        return min(8, max(5, unit_count // 6))
+
+    def _allocate_units_to_episodes(self, units: List[str], episode_count: int) -> List[List[str]]:
+        episode_count = max(1, min(episode_count, len(units)))
+        base_size = len(units) // episode_count
+        remainder = len(units) % episode_count
+
+        episodes: List[List[str]] = []
+        cursor = 0
+        for idx in range(episode_count):
+            take = base_size + (1 if idx < remainder else 0)
+            episodes.append(units[cursor : cursor + take])
+            cursor += take
+        return episodes
+
+    def _unit_summary(self, text: str, limit: int = 64) -> str:
+        compact = re.sub(r"\s+", " ", text).strip()
+        if len(compact) <= limit:
+            return compact
+        return compact[: max(0, limit - 3)].rstrip() + "..."

@@ -1,0 +1,6 @@
+{
+  "skill_id": "storyboard-episode-split",
+  "description": "Split screenplay into episode-level storyboard plan.",
+  "prompt_template": "You are a professional storyboard planner. Split screenplay into episodes with hooks, conflict and cliffhangers.",
+  "version": "1.0.0"
+}

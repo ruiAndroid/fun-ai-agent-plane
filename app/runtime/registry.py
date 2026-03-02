@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
-from .loader import load_agents, load_mcp_servers, load_skills
-from .types import AgentSpec, MCPServerSpec, RuntimeBundle, SkillSpec
+from .loader import load_agents, load_mcp_servers, load_model_profiles, load_skills
+from .types import AgentSpec, MCPServerSpec, ModelProfileSpec, RuntimeBundle, SkillSpec, WorkflowSpec
 
 
 @dataclass(frozen=True)
@@ -10,6 +10,7 @@ class RuntimeSnapshot:
     agents: Dict[str, AgentSpec]
     skills: Dict[str, SkillSpec]
     mcp_servers: Dict[str, MCPServerSpec]
+    model_profiles: Dict[str, ModelProfileSpec]
 
 
 class AgentRuntimeRegistry:
@@ -18,37 +19,63 @@ class AgentRuntimeRegistry:
         agent_dir: str,
         skills_dir: str,
         mcp_dir: str,
+        model_dir: str,
         enforce_agent_registry: bool = False,
     ) -> None:
         self.agent_dir = agent_dir
         self.skills_dir = skills_dir
         self.mcp_dir = mcp_dir
+        self.model_dir = model_dir
         self.enforce_agent_registry = enforce_agent_registry
-        self._snapshot = RuntimeSnapshot(agents={}, skills={}, mcp_servers={})
+        self._snapshot = RuntimeSnapshot(agents={}, skills={}, mcp_servers={}, model_profiles={})
 
     def reload(self) -> RuntimeSnapshot:
         self._snapshot = RuntimeSnapshot(
             agents=load_agents(self.agent_dir),
             skills=load_skills(self.skills_dir),
             mcp_servers=load_mcp_servers(self.mcp_dir),
+            model_profiles=load_model_profiles(self.model_dir),
         )
         return self._snapshot
 
     def snapshot(self) -> RuntimeSnapshot:
         return self._snapshot
 
-    def resolve(self, agent_id: str) -> RuntimeBundle:
+    def resolve(self, agent_id: str, workflow_id: Optional[str] = None) -> RuntimeBundle:
         agent = self._snapshot.agents.get(agent_id)
         if agent is None:
             if self.enforce_agent_registry:
                 raise ValueError(f"Unknown agent_id '{agent_id}'. Add config under {self.agent_dir}.")
-            agent = AgentSpec(agent_id=agent_id, display_name=agent_id)
+            default_workflow = WorkflowSpec(
+                workflow_id="default",
+                name="default",
+                skill_id="summarize-text",
+            )
+            agent = AgentSpec(
+                agent_id=agent_id,
+                display_name=agent_id,
+                workflows={"default": default_workflow},
+                default_workflow_id="default",
+            )
 
-        resolved_skills: List[SkillSpec] = []
-        for skill_id in agent.skills:
-            skill = self._snapshot.skills.get(skill_id)
-            if skill:
-                resolved_skills.append(skill)
+        selected_workflow_id = (workflow_id or "").strip() or (agent.default_workflow_id or "")
+        if not selected_workflow_id:
+            if not agent.workflows:
+                raise ValueError(f"Agent '{agent.agent_id}' has no configured workflows.")
+            selected_workflow_id = next(iter(agent.workflows.keys()))
+
+        workflow = agent.workflows.get(selected_workflow_id)
+        if workflow is None:
+            raise ValueError(
+                f"Workflow '{selected_workflow_id}' not found for agent '{agent.agent_id}'."
+            )
+
+        skill = self._snapshot.skills.get(workflow.skill_id)
+        if skill is None:
+            raise ValueError(
+                f"Workflow '{workflow.workflow_id}' of agent '{agent.agent_id}' references unknown "
+                f"skill '{workflow.skill_id}'."
+            )
 
         resolved_mcp: List[MCPServerSpec] = []
         for server_id in agent.mcp_servers:
@@ -56,4 +83,19 @@ class AgentRuntimeRegistry:
             if server:
                 resolved_mcp.append(server)
 
-        return RuntimeBundle(agent=agent, skills=resolved_skills, mcp_servers=resolved_mcp)
+        primary_model: Optional[ModelProfileSpec] = None
+        if workflow.model_profile:
+            primary_model = self._snapshot.model_profiles.get(workflow.model_profile)
+            if primary_model is None:
+                raise ValueError(
+                    f"Workflow '{workflow.workflow_id}' of agent '{agent.agent_id}' references "
+                    f"unknown model profile '{workflow.model_profile}'."
+                )
+
+        return RuntimeBundle(
+            agent=agent,
+            workflow=workflow,
+            skill=skill,
+            mcp_servers=resolved_mcp,
+            primary_model=primary_model,
+        )
