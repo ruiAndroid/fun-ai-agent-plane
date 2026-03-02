@@ -1,6 +1,6 @@
 {
   "skill_id": "storyboard-extract-roles",
-  "description": "Extract characters and role candidates from screenplay.",
-  "prompt_template": "Extract the core roles from the screenplay. Return role names and short role summaries.",
+  "description": "从剧本中提取核心角色与候选角色。",
+  "prompt_template": "请从剧本中提取核心角色，输出角色名称和简短角色描述。",
   "version": "1.0.0"
 }

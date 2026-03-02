@@ -1,21 +1,21 @@
 {
   "agent_id": "dreamworks-storyboard",
-  "display_name": "DreamWorks Storyboard Agent",
+  "display_name": "梦工厂-智能分镜",
   "default_workflow_id": "episode-split",
   "workflows": [
     {
       "workflow_id": "episode-split",
-      "name": "Script To Episodes",
+      "name": "剧本智能分集",
       "skill_id": "storyboard-episode-split",
       "model_profile": "mock-default",
-      "description": "Split screenplay into episode storyboard plan."
+      "description": "将剧本拆分为分集分镜规划。"
     },
     {
       "workflow_id": "extract-roles",
-      "name": "Extract Episode Roles",
+      "name": "提取分集角色",
       "skill_id": "storyboard-extract-roles",
       "model_profile": "openai-gpt-4o-mini",
-      "description": "Extract key characters and role candidates from screenplay text."
+      "description": "从剧本文本中提取关键角色和候选角色。"
     }
   ],
   "mcp_servers": [],

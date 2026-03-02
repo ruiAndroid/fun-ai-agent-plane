@@ -1,6 +1,6 @@
 {
   "skill_id": "storyboard-episode-split",
-  "description": "Split screenplay into episode-level storyboard plan.",
-  "prompt_template": "You are a professional storyboard planner. Split screenplay into episodes with hooks, conflict and cliffhangers.",
+  "description": "将剧本拆分为分集级别的分镜规划。",
+  "prompt_template": "你是一名专业分镜策划，请把剧本拆分为多集，并输出每集开场钩子、核心冲突、结尾悬念与场景分配。",
   "version": "1.0.0"
 }
