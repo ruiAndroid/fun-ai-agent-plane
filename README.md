@@ -1,14 +1,14 @@
 # fun-ai-agent-plane
 
-Agent runtime plane for task execution, streaming output, and concurrency control.
+智能体运行平面（plane），负责任务排队、并发执行与事件流输出。
 
-## Tech stack
+## 技术栈
 
 - Python 3.8+
 - FastAPI
 - asyncio worker pool + queue
 
-## Run locally
+## 本地运行
 
 ```bash
 python -m venv .venv
@@ -17,71 +17,71 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8100 --reload
 ```
 
-## Architecture layers
+## 三层架构
 
-- Structure layer: `Agent -> Workflows -> Skills`
-- Config layer: workflow-level parameters (currently `model_profile` only)
-- Capability layer: skill definitions and `prompt_template`
+- 结构层：`智能体 -> 工作流 -> 技能`
+- 可配层：工作流级参数（当前主要是 `model_profile`）
+- 能力层：技能定义与 `prompt_template`
 
-## Core APIs
+## 核心接口
 
-- `POST /v1/tasks`: create task and enqueue.
-- `GET /v1/tasks/{task_id}`: get task status/result.
-- `POST /v1/tasks/{task_id}/cancel`: request cancellation.
-- `GET /v1/tasks/{task_id}/events`: stream events with SSE.
-- `GET /v1/runtime`: show loaded runtime snapshot (agents/workflows/skills/mcp/models).
+- `POST /v1/tasks`：创建任务并入队
+- `GET /v1/tasks/{task_id}`：查询任务状态/结果
+- `POST /v1/tasks/{task_id}/cancel`：取消任务
+- `GET /v1/tasks/{task_id}/events`：SSE 事件流
+- `GET /v1/runtime`：查看当前加载的智能体/工作流/技能/mcp/模型配置快照
 
-`POST /v1/tasks` request fields:
+`POST /v1/tasks` 请求字段：
 
 - `tenant_id`
 - `agent_id`
-- `workflow_id` (optional, uses agent default workflow if omitted)
+- `workflow_id`（可选，不传则使用智能体默认工作流）
 - `prompt`
-- `skill_prompt_override` (optional, runtime override for selected skill prompt template)
-- `idempotency_key` (optional)
+- `skill_prompt_override`（可选，覆盖当前技能默认提示词）
+- `idempotency_key`（可选）
 
-## Concurrency controls
+## 并发控制
 
-- Global concurrency limit: `PLANE_MAX_GLOBAL_CONCURRENCY`
-- Per-tenant limit: `PLANE_MAX_TENANT_CONCURRENCY`
-- Per-agent limit: `PLANE_MAX_AGENT_CONCURRENCY`
-- Queue cap and backpressure: `PLANE_QUEUE_MAX_SIZE` with HTTP `429`.
+- 全局并发上限：`PLANE_MAX_GLOBAL_CONCURRENCY`
+- 租户并发上限：`PLANE_MAX_TENANT_CONCURRENCY`
+- 智能体并发上限：`PLANE_MAX_AGENT_CONCURRENCY`
+- 队列上限与背压：`PLANE_QUEUE_MAX_SIZE`（满载时返回 `429`）
 
-## Runtime config structure
+## 运行时配置结构
 
-- `agents/*.json`: agent + workflows config
-- `skills/*.json`: skill config (`prompt_template` supported)
-- `mcp/*.json`: mcp server config
-- `models/*.json`: shared model profiles
+- `agents/*.json`：智能体与工作流配置
+- `skills/*.json`：技能配置（支持 `prompt_template`）
+- `mcp/*.json`：MCP 服务配置
+- `models/*.json`：共享模型配置
 
-Related env vars:
+相关环境变量：
 
-- `PLANE_AGENT_DIR` (default `./agents`)
-- `PLANE_SKILLS_DIR` (default `./skills`)
-- `PLANE_MCP_DIR` (default `./mcp`)
-- `PLANE_MODEL_DIR` (default `./models`)
-- `PLANE_ENFORCE_AGENT_REGISTRY` (default `false`)
-- `PLANE_LLM_EXECUTION_MODE` (`off`/`mock`, otherwise use profile provider, default `off`)
+- `PLANE_AGENT_DIR`（默认 `./agents`）
+- `PLANE_SKILLS_DIR`（默认 `./skills`）
+- `PLANE_MCP_DIR`（默认 `./mcp`）
+- `PLANE_MODEL_DIR`（默认 `./models`）
+- `PLANE_ENFORCE_AGENT_REGISTRY`（默认 `false`）
+- `PLANE_LLM_EXECUTION_MODE`（`off`/`mock`，其他值按模型配置 provider 执行）
 
-Notes:
+说明：
 
-- Agent-level `prompt` is intentionally forbidden in config.
-- Skill-level `prompt_template` is allowed.
-- Supported model providers: `mock`, `openai-compatible`.
+- 智能体级 `prompt` 配置被禁止（开发阶段约束）
+- 技能级 `prompt_template` 允许配置
+- 当前支持模型提供商：`mock`、`openai-compatible`
 
-## Minimal config example
+## 最小配置示例
 
 `agents/demo.json`
 
 ```json
 {
   "agent_id": "demo-agent",
-  "display_name": "Demo Agent",
+  "display_name": "示例智能体",
   "default_workflow_id": "summarize",
   "workflows": [
     {
       "workflow_id": "summarize",
-      "name": "Summarize",
+      "name": "文本摘要",
       "skill_id": "summarize-text",
       "model_profile": "mock-default"
     }
@@ -98,8 +98,8 @@ Notes:
 ```json
 {
   "skill_id": "summarize-text",
-  "description": "Basic summarization capability.",
-  "prompt_template": "You summarize user input into concise bullet points with clear structure.",
+  "description": "基础文本摘要能力",
+  "prompt_template": "请将输入内容整理为结构化摘要。",
   "version": "1.0.0"
 }
 ```

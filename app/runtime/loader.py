@@ -15,7 +15,7 @@ def _load_json(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid JSON in {path}: {exc}") from exc
+        raise ValueError(f"JSON 格式非法: {path}: {exc}") from exc
 
 
 def _parse_workflow_config(raw_config: Any) -> Dict[str, str]:
@@ -29,7 +29,7 @@ def _parse_workflows(payload: dict, file_path: Path) -> Tuple[Dict[str, Workflow
 
     raw_workflows = payload.get("workflows")
     if raw_workflows is None:
-        # Legacy compatibility: map skills + default_model_profile to workflow entries.
+        # 兼容旧格式：把 skills + default_model_profile 映射成 workflows。
         default_model_profile = str(payload.get("default_model_profile", "")).strip() or None
         for skill_item in payload.get("skills", []):
             skill_id = str(skill_item).strip()
@@ -45,13 +45,13 @@ def _parse_workflows(payload: dict, file_path: Path) -> Tuple[Dict[str, Workflow
     elif isinstance(raw_workflows, list):
         for workflow_raw in raw_workflows:
             if not isinstance(workflow_raw, dict):
-                raise ValueError(f"workflow item must be an object: {file_path}")
+                raise ValueError(f"workflows 列表项必须是对象: {file_path}")
             workflow_id = str(workflow_raw.get("workflow_id", "")).strip()
             if not workflow_id:
-                raise ValueError(f"workflow_id is required in workflows list: {file_path}")
+                raise ValueError(f"workflows 列表项缺少 workflow_id: {file_path}")
             skill_id = str(workflow_raw.get("skill_id", "")).strip()
             if not skill_id:
-                raise ValueError(f"skill_id is required for workflow '{workflow_id}': {file_path}")
+                raise ValueError(f"工作流 '{workflow_id}' 缺少 skill_id: {file_path}")
             workflows[workflow_id] = WorkflowSpec(
                 workflow_id=workflow_id,
                 name=str(workflow_raw.get("name", workflow_id)).strip() or workflow_id,
@@ -64,12 +64,12 @@ def _parse_workflows(payload: dict, file_path: Path) -> Tuple[Dict[str, Workflow
         for workflow_id, workflow_raw in raw_workflows.items():
             workflow_id = str(workflow_id).strip()
             if not workflow_id:
-                raise ValueError(f"workflow key cannot be empty: {file_path}")
+                raise ValueError(f"workflows 键名不能为空: {file_path}")
             if not isinstance(workflow_raw, dict):
-                raise ValueError(f"workflow '{workflow_id}' must be an object: {file_path}")
+                raise ValueError(f"工作流 '{workflow_id}' 必须是对象: {file_path}")
             skill_id = str(workflow_raw.get("skill_id", "")).strip()
             if not skill_id:
-                raise ValueError(f"skill_id is required for workflow '{workflow_id}': {file_path}")
+                raise ValueError(f"工作流 '{workflow_id}' 缺少 skill_id: {file_path}")
             workflows[workflow_id] = WorkflowSpec(
                 workflow_id=workflow_id,
                 name=str(workflow_raw.get("name", workflow_id)).strip() or workflow_id,
@@ -79,14 +79,14 @@ def _parse_workflows(payload: dict, file_path: Path) -> Tuple[Dict[str, Workflow
                 config=_parse_workflow_config(workflow_raw.get("config")),
             )
     else:
-        raise ValueError(f"workflows must be an array/object when provided: {file_path}")
+        raise ValueError(f"workflows 必须是数组或对象: {file_path}")
 
     default_workflow_id = str(payload.get("default_workflow_id", "")).strip()
     if not default_workflow_id and workflows:
         default_workflow_id = next(iter(workflows.keys()))
     if default_workflow_id and default_workflow_id not in workflows:
         raise ValueError(
-            f"default_workflow_id '{default_workflow_id}' not found in workflows: {file_path}"
+            f"default_workflow_id '{default_workflow_id}' 不在 workflows 中: {file_path}"
         )
     return workflows, default_workflow_id
 
@@ -98,11 +98,11 @@ def load_agents(directory: str) -> Dict[str, AgentSpec]:
         payload = _load_json(file_path)
         if "prompt" in payload:
             raise ValueError(
-                f"'prompt' is not allowed in agent config during development stage: {file_path}"
+                f"开发阶段 agent 配置不允许 prompt 字段: {file_path}"
             )
         agent_id = str(payload.get("agent_id", "")).strip()
         if not agent_id:
-            raise ValueError(f"agent_id is required: {file_path}")
+            raise ValueError(f"缺少 agent_id: {file_path}")
         display_name = str(payload.get("display_name", agent_id)).strip() or agent_id
         mcp_servers = [
             str(item).strip() for item in payload.get("mcp_servers", []) if str(item).strip()
@@ -127,7 +127,7 @@ def load_skills(directory: str) -> Dict[str, SkillSpec]:
         payload = _load_json(file_path)
         skill_id = str(payload.get("skill_id", "")).strip()
         if not skill_id:
-            raise ValueError(f"skill_id is required: {file_path}")
+            raise ValueError(f"缺少 skill_id: {file_path}")
         description = str(payload.get("description", "")).strip()
         prompt_template = str(payload.get("prompt_template", payload.get("prompt", ""))).strip()
         version = str(payload.get("version", "1.0.0")).strip() or "1.0.0"
@@ -147,11 +147,11 @@ def load_mcp_servers(directory: str) -> Dict[str, MCPServerSpec]:
         payload = _load_json(file_path)
         server_id = str(payload.get("server_id", "")).strip()
         if not server_id:
-            raise ValueError(f"server_id is required: {file_path}")
+            raise ValueError(f"缺少 server_id: {file_path}")
         transport = str(payload.get("transport", "stdio")).strip() or "stdio"
         endpoint = str(payload.get("endpoint", "")).strip()
         if not endpoint:
-            raise ValueError(f"endpoint is required: {file_path}")
+            raise ValueError(f"缺少 endpoint: {file_path}")
         description = str(payload.get("description", "")).strip()
         servers[server_id] = MCPServerSpec(
             server_id=server_id,
@@ -182,35 +182,35 @@ def load_model_profiles(directory: str) -> Dict[str, ModelProfileSpec]:
         payload = _load_json(file_path)
         model_id = str(payload.get("model_id", "")).strip()
         if not model_id:
-            raise ValueError(f"model_id is required: {file_path}")
+            raise ValueError(f"缺少 model_id: {file_path}")
         provider = str(payload.get("provider", "")).strip()
         if not provider:
-            raise ValueError(f"provider is required: {file_path}")
+            raise ValueError(f"缺少 provider: {file_path}")
         model_name = str(payload.get("model_name", "")).strip()
         if not model_name:
-            raise ValueError(f"model_name is required: {file_path}")
+            raise ValueError(f"缺少 model_name: {file_path}")
 
         timeout_raw = payload.get("timeout_seconds", 30)
         try:
             timeout_seconds = int(timeout_raw)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"timeout_seconds must be an integer: {file_path}") from exc
+            raise ValueError(f"timeout_seconds 必须是整数: {file_path}") from exc
         if timeout_seconds <= 0:
-            raise ValueError(f"timeout_seconds must be > 0: {file_path}")
+            raise ValueError(f"timeout_seconds 必须大于 0: {file_path}")
 
         max_tokens = payload.get("max_tokens")
         if max_tokens is not None:
             try:
                 max_tokens = int(max_tokens)
             except (TypeError, ValueError) as exc:
-                raise ValueError(f"max_tokens must be an integer: {file_path}") from exc
+                raise ValueError(f"max_tokens 必须是整数: {file_path}") from exc
 
         temperature = payload.get("temperature")
         if temperature is not None:
             try:
                 temperature = float(temperature)
             except (TypeError, ValueError) as exc:
-                raise ValueError(f"temperature must be numeric: {file_path}") from exc
+                raise ValueError(f"temperature 必须是数字: {file_path}") from exc
 
         profiles[model_id] = ModelProfileSpec(
             model_id=model_id,

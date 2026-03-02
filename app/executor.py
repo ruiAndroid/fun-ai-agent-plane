@@ -52,12 +52,12 @@ class TaskExecutor:
 
     async def enqueue(self, task_id: str) -> int:
         if self.queue is None:
-            raise RuntimeError("Executor queue not initialized.")
+            raise RuntimeError("执行器队列未初始化。")
         try:
             self.queue.put_nowait(task_id)
             return self.queue.qsize()
         except asyncio.QueueFull as exc:
-            raise QueueAtCapacityError("Task queue is full") from exc
+            raise QueueAtCapacityError("任务队列已满。") from exc
 
     def queue_size(self) -> int:
         if self.queue is None:
@@ -66,7 +66,7 @@ class TaskExecutor:
 
     async def _get_tenant_limiter(self, tenant_id: str) -> asyncio.Semaphore:
         if self._tenant_lock is None:
-            raise RuntimeError("Tenant limiter lock not initialized.")
+            raise RuntimeError("租户限流锁未初始化。")
         async with self._tenant_lock:
             limiter = self._tenant_limiters.get(tenant_id)
             if limiter is None:
@@ -76,7 +76,7 @@ class TaskExecutor:
 
     async def _get_agent_limiter(self, agent_id: str) -> asyncio.Semaphore:
         if self._agent_lock is None:
-            raise RuntimeError("Agent limiter lock not initialized.")
+            raise RuntimeError("智能体限流锁未初始化。")
         async with self._agent_lock:
             limiter = self._agent_limiters.get(agent_id)
             if limiter is None:
@@ -86,7 +86,7 @@ class TaskExecutor:
 
     async def _worker_loop(self, worker_index: int) -> None:
         if self.queue is None:
-            raise RuntimeError("Executor queue not initialized.")
+            raise RuntimeError("执行器队列未初始化。")
         while True:
             task_id = await self.queue.get()
             try:
@@ -107,7 +107,7 @@ class TaskExecutor:
         tenant_limiter = await self._get_tenant_limiter(task_record.tenant_id)
         agent_limiter = await self._get_agent_limiter(task_record.agent_id)
         if self.global_semaphore is None:
-            raise RuntimeError("Global semaphore not initialized.")
+            raise RuntimeError("全局并发信号量未初始化。")
 
         async with self.global_semaphore:
             async with tenant_limiter:
@@ -175,18 +175,18 @@ class TaskExecutor:
 
         reversed_words = list(reversed(task_record.prompt.split()))
         if not reversed_words:
-            reversed_words = ["(empty)"]
+            reversed_words = ["(空输入)"]
 
         output = [
             "[",
             runtime.agent.display_name,
             "] ",
-            f"workflow={runtime.workflow.workflow_id}, skill={runtime.skill.skill_id}. ",
-            "processed prompt: ",
+            f"工作流={runtime.workflow.workflow_id}，技能={runtime.skill.skill_id}。 ",
+            "处理后的输入：",
             " ".join(reversed_words),
             ". ",
-            f"mcp={len(runtime.mcp_servers)}. ",
-            "concurrency-safe run completed.",
+            f"MCP数量={len(runtime.mcp_servers)}。 ",
+            "并发安全执行完成。",
         ]
         text = "".join(output)
         return [char for char in text]
@@ -219,11 +219,11 @@ class TaskExecutor:
 
         if not top_roles:
             return (
-                f"[{display_name}] role extraction result\n"
-                "No obvious role names were found. Provide more character-rich script text."
+                f"[{display_name}] 角色提取结果\n"
+                "未识别到明显角色名称，请提供包含更多角色信息的剧本文本。"
             )
 
-        lines = [f"[{display_name}] role extraction result", f"role_count={len(top_roles)}", ""]
+        lines = [f"[{display_name}] 角色提取结果", f"角色数量={len(top_roles)}", ""]
         for idx, role_name in enumerate(top_roles, start=1):
             lines.append(f"{idx}. {role_name}")
         return "\n".join(lines).strip()
@@ -232,32 +232,32 @@ class TaskExecutor:
         units = self._split_script_units(prompt)
         if not units:
             return (
-                f"[{display_name}] storyboard episode split result\n"
-                "No valid script content found. Please provide screenplay scenes or paragraphs."
+                f"[{display_name}] 剧本分集结果\n"
+                "未检测到有效剧本内容，请提供场景或段落文本。"
             )
 
         episode_count = self._suggest_episode_count(len(units))
         episodes = self._allocate_units_to_episodes(units, episode_count)
 
         lines: List[str] = []
-        lines.append(f"[{display_name}] storyboard episode split result")
-        lines.append(f"total_script_units={len(units)}")
-        lines.append(f"suggested_episodes={len(episodes)}")
+        lines.append(f"[{display_name}] 剧本分集结果")
+        lines.append(f"脚本单元数={len(units)}")
+        lines.append(f"建议集数={len(episodes)}")
         lines.append("")
 
         for index, episode_units in enumerate(episodes, start=1):
-            title = f"Episode {index:02d}"
+            title = f"第 {index:02d} 集"
             lines.append(f"{title}")
-            lines.append(f"- scene_count: {len(episode_units)}")
-            lines.append(f"- opening_hook: {self._unit_summary(episode_units[0])}")
-            lines.append(f"- core_conflict: {self._unit_summary(episode_units[len(episode_units) // 2])}")
-            lines.append(f"- ending_cliffhanger: {self._unit_summary(episode_units[-1])}")
-            lines.append("- scenes:")
+            lines.append(f"- 场景数量: {len(episode_units)}")
+            lines.append(f"- 开场钩子: {self._unit_summary(episode_units[0])}")
+            lines.append(f"- 核心冲突: {self._unit_summary(episode_units[len(episode_units) // 2])}")
+            lines.append(f"- 结尾悬念: {self._unit_summary(episode_units[-1])}")
+            lines.append("- 场景拆分:")
             for scene_idx, scene in enumerate(episode_units, start=1):
                 lines.append(f"  {scene_idx}. {self._unit_summary(scene, limit=90)}")
             lines.append("")
 
-        lines.append("split_strategy=scene-header-aware + balanced-allocation")
+        lines.append("拆分策略=场景标题识别 + 均衡分配")
         return "\n".join(lines).strip()
 
     def _split_script_units(self, prompt: str) -> List[str]:

@@ -45,7 +45,7 @@ class AgentRuntimeRegistry:
         agent = self._snapshot.agents.get(agent_id)
         if agent is None:
             if self.enforce_agent_registry:
-                raise ValueError(f"Unknown agent_id '{agent_id}'. Add config under {self.agent_dir}.")
+                raise ValueError(f"未知 agent_id '{agent_id}'，请在 {self.agent_dir} 下补充配置。")
             default_workflow = WorkflowSpec(
                 workflow_id="default",
                 name="default",
@@ -61,20 +61,20 @@ class AgentRuntimeRegistry:
         selected_workflow_id = (workflow_id or "").strip() or (agent.default_workflow_id or "")
         if not selected_workflow_id:
             if not agent.workflows:
-                raise ValueError(f"Agent '{agent.agent_id}' has no configured workflows.")
+                raise ValueError(f"智能体 '{agent.agent_id}' 未配置工作流。")
             selected_workflow_id = next(iter(agent.workflows.keys()))
 
         workflow = agent.workflows.get(selected_workflow_id)
         if workflow is None:
             raise ValueError(
-                f"Workflow '{selected_workflow_id}' not found for agent '{agent.agent_id}'."
+                f"智能体 '{agent.agent_id}' 未找到工作流 '{selected_workflow_id}'。"
             )
 
         skill = self._snapshot.skills.get(workflow.skill_id)
         if skill is None:
             raise ValueError(
-                f"Workflow '{workflow.workflow_id}' of agent '{agent.agent_id}' references unknown "
-                f"skill '{workflow.skill_id}'."
+                f"智能体 '{agent.agent_id}' 的工作流 '{workflow.workflow_id}' 引用了未知技能 "
+                f"'{workflow.skill_id}'。"
             )
 
         resolved_mcp: List[MCPServerSpec] = []
@@ -88,8 +88,8 @@ class AgentRuntimeRegistry:
             primary_model = self._snapshot.model_profiles.get(workflow.model_profile)
             if primary_model is None:
                 raise ValueError(
-                    f"Workflow '{workflow.workflow_id}' of agent '{agent.agent_id}' references "
-                    f"unknown model profile '{workflow.model_profile}'."
+                    f"智能体 '{agent.agent_id}' 的工作流 '{workflow.workflow_id}' 引用了未知模型配置 "
+                    f"'{workflow.model_profile}'。"
                 )
 
         return RuntimeBundle(
