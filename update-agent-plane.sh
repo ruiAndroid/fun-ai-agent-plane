@@ -11,6 +11,15 @@ HEALTH_WAIT_SECONDS="${HEALTH_WAIT_SECONDS:-2}"
 PYTHON_BIN="${PYTHON_BIN:-}"
 PIP_EXTRA_ARGS="${PIP_EXTRA_ARGS:-}"
 RECREATE_VENV="${RECREATE_VENV:-false}"
+ENABLE_AGENT_SYNC="${ENABLE_AGENT_SYNC:-true}"
+ENABLE_SKILLS_SYNC="${ENABLE_SKILLS_SYNC:-false}"
+ENABLE_MCP_SYNC="${ENABLE_MCP_SYNC:-false}"
+AGENT_SYNC_CMD="${AGENT_SYNC_CMD:-}"
+SKILLS_SYNC_CMD="${SKILLS_SYNC_CMD:-}"
+MCP_SYNC_CMD="${MCP_SYNC_CMD:-}"
+AGENT_SYNC_SCRIPT="${AGENT_SYNC_SCRIPT:-./deploy-hooks/agent-sync.sh}"
+SKILLS_SYNC_SCRIPT="${SKILLS_SYNC_SCRIPT:-./deploy-hooks/skills-sync.sh}"
+MCP_SYNC_SCRIPT="${MCP_SYNC_SCRIPT:-./deploy-hooks/mcp-sync.sh}"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -20,6 +29,41 @@ fail() {
 require_cmd() {
   local cmd="$1"
   command -v "${cmd}" >/dev/null 2>&1 || fail "${cmd} not found"
+}
+
+run_shell_step() {
+  local step_name="$1"
+  local cmd="$2"
+  echo "Running ${step_name}: ${cmd}"
+  bash -lc "${cmd}"
+}
+
+run_sync_step() {
+  local step_name="$1"
+  local enabled="$2"
+  local cmd="$3"
+  local script_path="$4"
+
+  if [[ "${enabled}" != "true" ]]; then
+    echo "Skip ${step_name}: disabled (ENABLE_${step_name^^}_SYNC=${enabled})"
+    return 0
+  fi
+
+  if [[ -n "${cmd}" ]]; then
+    run_shell_step "${step_name}" "${cmd}"
+    return 0
+  fi
+
+  if [[ -f "${script_path}" ]]; then
+    if [[ ! -x "${script_path}" ]]; then
+      chmod +x "${script_path}"
+    fi
+    echo "Running ${step_name} sync script: ${script_path}"
+    "${script_path}"
+    return 0
+  fi
+
+  echo "Skip ${step_name}: no command set and script not found (${script_path})"
 }
 
 python_major_minor() {
@@ -141,20 +185,29 @@ git fetch "${GIT_REMOTE}" "${GIT_BRANCH}"
 git checkout "${GIT_BRANCH}"
 git pull --ff-only "${GIT_REMOTE}" "${GIT_BRANCH}"
 
-echo "[2/5] Sync Python venv and dependencies"
+echo "[2/8] Sync Python venv and dependencies"
 ensure_venv_python
 .venv/bin/python -m pip install --upgrade pip
 # shellcheck disable=SC2086
 .venv/bin/python -m pip install ${PIP_EXTRA_ARGS} -r requirements.txt
 
-echo "[3/5] Restart service ${SERVICE_NAME}"
+echo "[3/8] Sync agent assets/config"
+run_sync_step "agent" "${ENABLE_AGENT_SYNC}" "${AGENT_SYNC_CMD}" "${AGENT_SYNC_SCRIPT}"
+
+echo "[4/8] Sync skills"
+run_sync_step "skills" "${ENABLE_SKILLS_SYNC}" "${SKILLS_SYNC_CMD}" "${SKILLS_SYNC_SCRIPT}"
+
+echo "[5/8] Sync MCP"
+run_sync_step "mcp" "${ENABLE_MCP_SYNC}" "${MCP_SYNC_CMD}" "${MCP_SYNC_SCRIPT}"
+
+echo "[6/8] Restart service ${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
 
-echo "[4/5] Health check ${HEALTH_URL}"
+echo "[7/8] Health check ${HEALTH_URL}"
 for ((i=1; i<=HEALTH_RETRIES; i++)); do
   if curl -fsS "${HEALTH_URL}" >/dev/null 2>&1; then
     echo "SUCCESS: ${SERVICE_NAME} is healthy"
-    echo "[5/5] Show service status"
+    echo "[8/8] Show service status"
     systemctl --no-pager --full status "${SERVICE_NAME}" | head -n 20
     exit 0
   fi
