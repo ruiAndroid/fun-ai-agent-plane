@@ -2,16 +2,29 @@ from dataclasses import replace
 from typing import Dict, Optional
 
 from ..runtime import RuntimeBundle
-from .adapters import MockLLMAdapter, OpenAICompatibleAdapter
+from .adapters import GatewayMessagesAdapter, MockLLMAdapter, OpenAICompatibleAdapter
 from .types import LLMRequest, LLMResponse
 
 
 class LLMService:
-    def __init__(self, execution_mode: str = "off") -> None:
+    def __init__(
+        self,
+        execution_mode: str = "off",
+        gateway_base_url: str = "https://api.ai.fun.tv/v1",
+        gateway_token: str = "",
+        gateway_anthropic_version: str = "2023-06-01",
+    ) -> None:
         self.execution_mode = execution_mode.strip().lower()
+        gateway_adapter = GatewayMessagesAdapter(
+            default_base_url=gateway_base_url,
+            default_token=gateway_token,
+            anthropic_version=gateway_anthropic_version,
+        )
         self._adapters: Dict[str, object] = {
             "mock": MockLLMAdapter(),
             "openai-compatible": OpenAICompatibleAdapter(),
+            "gateway-messages": gateway_adapter,
+            "anthropic-messages": gateway_adapter,
         }
 
     async def complete(

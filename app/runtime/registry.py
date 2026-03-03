@@ -54,14 +54,16 @@ class AgentRuntimeRegistry:
         agent = self._snapshot.agents.get(agent_id)
         if agent is None:
             if self.enforce_agent_registry:
-                raise ValueError(f"未知 agent_id '{agent_id}'，请在 {self.agent_dir} 下补充配置。")
+                raise ValueError(
+                    f"Unknown agent_id '{agent_id}'. Please add config under {self.agent_dir}."
+                )
             default_workflow = WorkflowSpec(
                 workflow_id="default",
                 name="default",
                 steps=[
                     WorkflowStepSpec(
                         step_id="default-step-1",
-                        name="默认步骤",
+                        name="default-step",
                         skill_id="summarize-text",
                     )
                 ],
@@ -76,22 +78,24 @@ class AgentRuntimeRegistry:
         selected_workflow_id = (workflow_id or "").strip() or (agent.default_workflow_id or "")
         if not selected_workflow_id:
             if not agent.workflows:
-                raise ValueError(f"智能体 '{agent.agent_id}' 未配置工作流。")
+                raise ValueError(f"Agent '{agent.agent_id}' has no workflows configured.")
             selected_workflow_id = next(iter(agent.workflows.keys()))
 
         workflow = agent.workflows.get(selected_workflow_id)
         if workflow is None:
-            raise ValueError(f"智能体 '{agent.agent_id}' 未找到工作流 '{selected_workflow_id}'。")
+            raise ValueError(
+                f"Agent '{agent.agent_id}' has no workflow '{selected_workflow_id}'."
+            )
         if not workflow.steps:
-            raise ValueError(f"工作流 '{workflow.workflow_id}' 未配置步骤。")
+            raise ValueError(f"Workflow '{workflow.workflow_id}' has no steps.")
 
         resolved_steps: List[RuntimeStepBundle] = []
         for step in workflow.steps:
             skill = self._snapshot.skills.get(step.skill_id)
             if skill is None:
                 raise ValueError(
-                    f"智能体 '{agent.agent_id}' 的工作流 '{workflow.workflow_id}' 的步骤 "
-                    f"'{step.step_id}' 引用了未知技能 '{step.skill_id}'。"
+                    f"Workflow '{workflow.workflow_id}' step '{step.step_id}' "
+                    f"references unknown skill '{step.skill_id}'."
                 )
             resolved_steps.append(RuntimeStepBundle(step=step, skill=skill))
 
@@ -105,9 +109,11 @@ class AgentRuntimeRegistry:
         if workflow.model_profile:
             primary_model = self._snapshot.model_profiles.get(workflow.model_profile)
             if primary_model is None:
-                raise ValueError(
-                    f"智能体 '{agent.agent_id}' 的工作流 '{workflow.workflow_id}' 引用了未知模型配置 "
-                    f"'{workflow.model_profile}'。"
+                # Fallback mode: use workflow.model_profile directly as gateway model id.
+                primary_model = ModelProfileSpec(
+                    model_id=workflow.model_profile,
+                    provider="gateway-messages",
+                    model_name=workflow.model_profile,
                 )
 
         return RuntimeBundle(

@@ -24,7 +24,12 @@ runtime_registry = AgentRuntimeRegistry(
     model_dir=settings.model_dir,
     enforce_agent_registry=settings.enforce_agent_registry,
 )
-llm_service = LLMService(execution_mode=settings.llm_execution_mode)
+llm_service = LLMService(
+    execution_mode=settings.llm_execution_mode,
+    gateway_base_url=settings.gateway_base_url,
+    gateway_token=settings.gateway_token,
+    gateway_anthropic_version=settings.gateway_anthropic_version,
+)
 executor = TaskExecutor(
     settings=settings,
     store=store,

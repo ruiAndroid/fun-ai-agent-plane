@@ -25,6 +25,20 @@ uvicorn app.main:app --host 0.0.0.0 --port 8100 --reload
 - `GET /v1/tasks/{task_id}/events` (SSE)
 - `GET /v1/runtime`
 
+## LLM gateway
+
+When `PLANE_LLM_EXECUTION_MODE=on`, workflows call the unified gateway using:
+
+- `POST ${GATEWAY_BASE_URL}/messages`
+- header `Authorization: Bearer ${GATEWAY_TOKEN}`
+- header `anthropic-version: ${GATEWAY_ANTHROPIC_VERSION}` (default `2023-06-01`)
+
+Runtime config is dynamically loaded from `.env.production` by default.
+You can override the path with `PLANE_ENV_FILE=/path/to/env-file`.
+
+`workflow.model_profile` is treated as the gateway `model` id. If no local model profile file matches,
+the runtime auto-falls back to gateway mode with that model id.
+
 ## Create task payload
 
 - `tenant_id`

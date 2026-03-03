@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 def _read_int(name: str, default: int, minimum: int = 1) -> int:
@@ -27,6 +28,34 @@ def _read_bool(name: str, default: bool) -> bool:
     raise ValueError(f"{name} must be a boolean value")
 
 
+def _load_env_file(path: str) -> None:
+    env_path = Path(path)
+    if not env_path.exists() or not env_path.is_file():
+        return
+
+    try:
+        content = env_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
 @dataclass(frozen=True)
 class Settings:
     host: str
@@ -44,9 +73,15 @@ class Settings:
     model_dir: str
     enforce_agent_registry: bool
     llm_execution_mode: str
+    gateway_base_url: str
+    gateway_token: str
+    gateway_anthropic_version: str
 
 
 def load_settings() -> Settings:
+    env_file = os.getenv("PLANE_ENV_FILE", ".env.production")
+    _load_env_file(env_file)
+
     return Settings(
         host=os.getenv("PLANE_HOST", "0.0.0.0"),
         port=_read_int("PLANE_PORT", 8100, minimum=1),
@@ -63,6 +98,18 @@ def load_settings() -> Settings:
         model_dir=os.getenv("PLANE_MODEL_DIR", "./models"),
         enforce_agent_registry=_read_bool("PLANE_ENFORCE_AGENT_REGISTRY", False),
         llm_execution_mode=os.getenv("PLANE_LLM_EXECUTION_MODE", "off"),
+        gateway_base_url=os.getenv(
+            "GATEWAY_BASE_URL",
+            os.getenv("LLM_GATEWAY_BASE_URL", "https://api.ai.fun.tv/v1"),
+        ),
+        gateway_token=os.getenv(
+            "GATEWAY_TOKEN",
+            os.getenv("LLM_GATEWAY_TOKEN", ""),
+        ),
+        gateway_anthropic_version=os.getenv(
+            "GATEWAY_ANTHROPIC_VERSION",
+            os.getenv("LLM_GATEWAY_ANTHROPIC_VERSION", "2023-06-01"),
+        ),
     )
 
 
