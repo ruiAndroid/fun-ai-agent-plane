@@ -38,7 +38,9 @@ class CreateTaskRequest(ModelCompat):
     tenant_id: str = Field(min_length=1, max_length=128)
     agent_id: str = Field(min_length=1, max_length=128)
     workflow_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    skill_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
     skill_prompt_override: Optional[str] = Field(default=None, max_length=12000)
+    skill_prompt_overrides: Optional[Dict[str, str]] = None
     prompt: str = Field(min_length=1, max_length=6000)
     idempotency_key: Optional[str] = Field(default=None, max_length=128)
 
@@ -48,6 +50,7 @@ class TaskView(ModelCompat):
     tenant_id: str
     agent_id: str
     workflow_id: Optional[str]
+    skill_id: Optional[str]
     status: TaskStatus
     output: str
     error: Optional[str]

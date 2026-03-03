@@ -1,21 +1,51 @@
 {
   "agent_id": "dreamworks-storyboard",
   "display_name": "梦工厂-智能分镜",
-  "default_workflow_id": "episode-split",
+  "default_workflow_id": "storyboard-pipeline",
   "workflows": [
     {
-      "workflow_id": "episode-split",
-      "name": "剧本智能分集",
-      "skill_id": "storyboard-episode-split",
+      "workflow_id": "storyboard-pipeline",
+      "name": "剧本分镜全流程",
       "model_profile": "mock-default",
-      "description": "将剧本拆分为分集分镜规划。"
+      "description": "先执行剧本智能分集，再基于上一步结果提取分镜角色。",
+      "steps": [
+        {
+          "step_id": "episode-split",
+          "name": "剧本智能分集",
+          "skill_id": "storyboard-episode-split"
+        },
+        {
+          "step_id": "extract-roles",
+          "name": "提取分镜角色",
+          "skill_id": "storyboard-extract-roles"
+        }
+      ]
     },
     {
-      "workflow_id": "extract-roles",
-      "name": "提取分集角色",
-      "skill_id": "storyboard-extract-roles",
-      "model_profile": "openai-gpt-4o-mini",
-      "description": "从剧本文本中提取关键角色和候选角色。"
+      "workflow_id": "episode-split-only",
+      "name": "仅剧本分集",
+      "model_profile": "mock-default",
+      "description": "仅执行第一步：剧本智能分集。",
+      "steps": [
+        {
+          "step_id": "episode-split",
+          "name": "剧本智能分集",
+          "skill_id": "storyboard-episode-split"
+        }
+      ]
+    },
+    {
+      "workflow_id": "extract-roles-only",
+      "name": "仅角色提取",
+      "model_profile": "mock-default",
+      "description": "仅执行角色提取。",
+      "steps": [
+        {
+          "step_id": "extract-roles",
+          "name": "提取分镜角色",
+          "skill_id": "storyboard-extract-roles"
+        }
+      ]
     }
   ],
   "mcp_servers": [],

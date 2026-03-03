@@ -11,9 +11,11 @@ class TaskRecord:
     tenant_id: str
     agent_id: str
     workflow_id: Optional[str]
+    skill_id: Optional[str]
     prompt: str
     status: TaskStatus
     skill_prompt_override: Optional[str] = None
+    skill_prompt_overrides: Dict[str, str] = field(default_factory=dict)
     output_chunks: List[str] = field(default_factory=list)
     error: Optional[str] = None
     idempotency_key: Optional[str] = None
@@ -27,6 +29,7 @@ class TaskRecord:
             tenant_id=self.tenant_id,
             agent_id=self.agent_id,
             workflow_id=self.workflow_id,
+            skill_id=self.skill_id,
             status=self.status,
             output="".join(self.output_chunks),
             error=self.error,
@@ -37,10 +40,13 @@ class TaskRecord:
 
 
 class TaskStore:
+    _EVENT_BACKLOG_LIMIT = 512
+
     def __init__(self) -> None:
         self._tasks: Dict[str, TaskRecord] = {}
         self._idempotency_index: Dict[str, str] = {}
         self._subscribers: Dict[str, Set[asyncio.Queue]] = {}
+        self._event_backlog: Dict[str, List[str]] = {}
         self._lock = asyncio.Lock()
 
     def _idempotency_scope_key(
@@ -58,8 +64,10 @@ class TaskStore:
         tenant_id: str,
         agent_id: str,
         workflow_id: Optional[str],
+        skill_id: Optional[str],
         prompt: str,
         skill_prompt_override: Optional[str],
+        skill_prompt_overrides: Optional[Dict[str, str]],
         idempotency_key: Optional[str],
     ) -> Tuple[TaskRecord, bool]:
         async with self._lock:
@@ -82,12 +90,15 @@ class TaskStore:
                 tenant_id=tenant_id,
                 agent_id=agent_id,
                 workflow_id=workflow_id,
+                skill_id=skill_id,
                 prompt=prompt,
                 skill_prompt_override=skill_prompt_override,
+                skill_prompt_overrides=skill_prompt_overrides or {},
                 status=TaskStatus.QUEUED,
                 idempotency_key=idempotency_key,
             )
             self._tasks[task_id] = created
+            self._event_backlog[task_id] = []
             if idempotency_key:
                 scoped_key = self._idempotency_scope_key(
                     tenant_id=tenant_id,
@@ -102,6 +113,7 @@ class TaskStore:
         async with self._lock:
             task = self._tasks.pop(task_id, None)
             self._subscribers.pop(task_id, None)
+            self._event_backlog.pop(task_id, None)
             if task and task.idempotency_key:
                 scoped_key = self._idempotency_scope_key(
                     tenant_id=task.tenant_id,
@@ -182,6 +194,11 @@ class TaskStore:
         async with self._lock:
             if task_id not in self._tasks:
                 return None
+            for message in self._event_backlog.get(task_id, []):
+                try:
+                    queue.put_nowait(message)
+                except asyncio.QueueFull:
+                    break
             self._subscribers.setdefault(task_id, set()).add(queue)
         return queue
 
@@ -197,6 +214,12 @@ class TaskStore:
     async def publish(self, task_id: str, event_type: str, payload: Dict) -> None:
         message = TaskEvent(event_type=event_type, payload=payload).to_json()
         async with self._lock:
+            # Snapshot already carries full output text, so replay backlog focuses on control/trace events.
+            if event_type != "token":
+                history = self._event_backlog.setdefault(task_id, [])
+                history.append(message)
+                if len(history) > self._EVENT_BACKLOG_LIMIT:
+                    del history[: len(history) - self._EVENT_BACKLOG_LIMIT]
             subscribers = list(self._subscribers.get(task_id, set()))
 
         for queue in subscribers:

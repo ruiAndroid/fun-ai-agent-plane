@@ -109,8 +109,10 @@ async def create_task(request: CreateTaskRequest) -> dict:
         tenant_id=request.tenant_id,
         agent_id=request.agent_id,
         workflow_id=request.workflow_id,
+        skill_id=request.skill_id,
         prompt=request.prompt,
         skill_prompt_override=request.skill_prompt_override,
+        skill_prompt_overrides=request.skill_prompt_overrides,
         idempotency_key=request.idempotency_key,
     )
     if not created:

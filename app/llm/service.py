@@ -18,25 +18,27 @@ class LLMService:
         self,
         runtime: RuntimeBundle,
         prompt: str,
-        skill_prompt_override: Optional[str] = None,
+        skill_prompt: Optional[str] = None,
     ) -> LLMResponse:
         profile = runtime.primary_model
         if profile is None:
-            raise RuntimeError(f"智能体 '{runtime.agent.agent_id}' 未配置模型。")
+            raise RuntimeError(f"Agent '{runtime.agent.agent_id}' has no model profile.")
         if self.execution_mode == "off":
-            raise RuntimeError("LLM 执行已关闭（PLANE_LLM_EXECUTION_MODE=off）。")
+            raise RuntimeError("LLM execution is disabled (PLANE_LLM_EXECUTION_MODE=off).")
         if self.execution_mode == "mock":
             profile = replace(profile, provider="mock")
 
         system_prompt = self._system_prompt_for_skill(
             agent_id=runtime.agent.agent_id,
             workflow_id=runtime.workflow.workflow_id,
-            skill_prompt=skill_prompt_override or runtime.skill.prompt_template,
+            skill_prompt=skill_prompt or "",
         )
         provider = profile.provider.strip().lower()
         adapter = self._adapters.get(provider)
         if adapter is None:
-            raise RuntimeError(f"模型 '{profile.model_id}' 不支持提供商 '{profile.provider}'。")
+            raise RuntimeError(
+                f"Model '{profile.model_id}' uses unsupported provider '{profile.provider}'."
+            )
         request = LLMRequest(
             prompt=prompt,
             system_prompt=system_prompt,
@@ -45,12 +47,10 @@ class LLMService:
         )
         return await adapter.complete(profile, request)
 
-    def _system_prompt_for_skill(
-        self, agent_id: str, workflow_id: str, skill_prompt: str
-    ) -> str:
+    def _system_prompt_for_skill(self, agent_id: str, workflow_id: str, skill_prompt: str) -> str:
         if skill_prompt.strip():
             return skill_prompt.strip()
         return (
-            f"你是智能体 '{agent_id}'，当前执行工作流 '{workflow_id}'。"
-            "请返回简洁、可执行的结果。"
+            f"You are agent '{agent_id}', currently running workflow '{workflow_id}'. "
+            "Return concise and executable results."
         )

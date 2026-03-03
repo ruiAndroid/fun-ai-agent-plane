@@ -1,6 +1,6 @@
 {
   "skill_id": "storyboard-episode-split",
   "description": "将剧本拆分为分集级别的分镜规划。",
-  "prompt_template": "你是一名专业分镜策划，请把剧本拆分为多集，并输出每集开场钩子、核心冲突、结尾悬念与场景分配。",
-  "version": "1.0.0"
+  "prompt_template": "你是专业分镜策划，请将输入剧本拆分为分集规划，给出每集开场钩子、核心冲突、结尾悬念和场景拆分。",
+  "version": "1.1.0"
 }
