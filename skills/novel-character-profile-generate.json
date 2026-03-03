@@ -1,0 +1,6 @@
+{
+  "skill_id": "novel-character-profile-generate",
+  "description": "基于梗概生成角色设定。",
+  "prompt_template": "请基于故事梗概输出角色设定：主角/配角目标、动机、冲突关系、成长弧线、人物标签、对白风格。",
+  "version": "1.0.0"
+}

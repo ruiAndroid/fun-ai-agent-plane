@@ -1,0 +1,6 @@
+{
+  "skill_id": "novel-episode-outline-generate",
+  "description": "基于角色与梗概生成分集大纲。",
+  "prompt_template": "请根据期望集数生成分集大纲。每集包含：剧情目标、关键事件、冲突升级、人物推进、结尾悬念。",
+  "version": "1.0.0"
+}

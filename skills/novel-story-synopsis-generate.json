@@ -1,0 +1,6 @@
+{
+  "skill_id": "novel-story-synopsis-generate",
+  "description": "基于小说输入生成可改编故事梗概。",
+  "prompt_template": "请基于小说原文、目标受众和改编目标，输出结构化故事梗概：主题、主线、核心冲突、情绪基调、看点、改编风险。",
+  "version": "1.0.0"
+}

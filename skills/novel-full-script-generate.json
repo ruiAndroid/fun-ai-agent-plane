@@ -1,0 +1,6 @@
+{
+  "skill_id": "novel-full-script-generate",
+  "description": "基于分集大纲生成全集剧本草案。",
+  "prompt_template": "请基于分集大纲输出全集剧本草案，按集提供场景编号、场景描述、人物对白、动作提示和节奏建议。",
+  "version": "1.0.0"
+}
