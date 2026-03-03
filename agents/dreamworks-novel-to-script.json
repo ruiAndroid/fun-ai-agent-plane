@@ -1,11 +1,26 @@
 {
   "agent_id": "dreamworks-novel-to-script",
   "display_name": "梦工厂-小说转剧本",
-  "workflows": [],
+  "default_workflow_id": "novel-intake",
+  "workflows": [
+    {
+      "workflow_id": "novel-intake",
+      "name": "小说输入接收",
+      "model_profile": "mock-default",
+      "description": "接收小说输入 JSON（内容/受众/期望集数）并标准化为后续可用数据。",
+      "steps": [
+        {
+          "step_id": "novel-intake",
+          "name": "小说输入解析",
+          "skill_id": "novel-intake-parse"
+        }
+      ]
+    }
+  ],
   "mcp_servers": [],
   "metadata": {
     "owner": "dreamworks",
     "domain": "novel-to-script",
-    "stage": "scaffold"
+    "stage": "intake"
   }
 }

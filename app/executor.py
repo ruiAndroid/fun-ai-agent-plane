@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 from typing import Dict, List, Optional, Tuple
 
@@ -182,7 +183,7 @@ class TaskExecutor:
             )
 
     async def _run_workflow(self, task_record: TaskRecord, runtime: RuntimeBundle) -> str:
-        step_input = task_record.prompt
+        step_input = self._initial_step_input(task_record)
         step_outputs: List[Tuple[RuntimeStepBundle, str]] = []
         total_steps = len(runtime.steps)
 
@@ -265,6 +266,8 @@ class TaskExecutor:
         step_input: str,
     ) -> str:
         skill_id = runtime_step.skill.skill_id
+        if skill_id == "novel-intake-parse":
+            return self._build_novel_intake_summary(task_record, step_input, runtime.agent.display_name)
         if skill_id == "storyboard-episode-split":
             return self._build_storyboard_episode_plan(step_input, runtime.agent.display_name)
         if skill_id == "storyboard-extract-roles":
@@ -333,6 +336,50 @@ class TaskExecutor:
         if len(compact) <= limit:
             return compact
         return compact[: max(0, limit - 3)].rstrip() + "..."
+
+    def _initial_step_input(self, task_record: TaskRecord) -> str:
+        if task_record.input_payload:
+            return json.dumps(task_record.input_payload, ensure_ascii=False, indent=2)
+        return task_record.prompt
+
+    def _build_novel_intake_summary(
+        self, task_record: TaskRecord, step_input: str, display_name: str
+    ) -> str:
+        payload = task_record.input_payload or {}
+        novel_content = str(payload.get("novel_content", "")).strip()
+        target_audience = str(payload.get("target_audience", "")).strip()
+        expected_episode_count = payload.get("expected_episode_count")
+
+        if not novel_content:
+            novel_content = step_input.strip()
+        if not target_audience:
+            target_audience = "未指定"
+
+        episode_count_text = "未指定"
+        if isinstance(expected_episode_count, int):
+            episode_count_text = str(expected_episode_count)
+        else:
+            raw_episode = str(expected_episode_count or "").strip()
+            if raw_episode:
+                episode_count_text = raw_episode
+
+        synopsis = self._unit_summary(novel_content, limit=240) if novel_content else "未提供小说内容"
+
+        lines = [
+            f"[{display_name}] Novel Intake",
+            f"受众={target_audience}",
+            f"期望集数={episode_count_text}",
+            f"小说内容长度={len(novel_content)}",
+            "",
+            "标准化输入摘要:",
+            synopsis,
+            "",
+            "下一步建议:",
+            "1. 角色抽取与关系网",
+            "2. 主线/支线冲突拆解",
+            "3. 按期望集数做分集大纲",
+        ]
+        return "\n".join(lines).strip()
 
     def _build_storyboard_role_extract(self, prompt: str, display_name: str) -> str:
         normalized = re.sub(r"[，。！？、；：,.!?;:()\[\]{}<>\"'`~@#$%^&*_+=/\\|-]+", " ", prompt)

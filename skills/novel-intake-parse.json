@@ -1,0 +1,6 @@
+{
+  "skill_id": "novel-intake-parse",
+  "description": "接收并标准化小说输入 JSON。",
+  "prompt_template": "你是小说转剧本任务的输入解析器。请读取 JSON 输入中的 novel_content、target_audience、expected_episode_count，并输出结构化的标准化摘要，供后续步骤使用。",
+  "version": "1.0.0"
+}

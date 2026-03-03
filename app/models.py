@@ -41,6 +41,7 @@ class CreateTaskRequest(ModelCompat):
     skill_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
     skill_prompt_override: Optional[str] = Field(default=None, max_length=12000)
     skill_prompt_overrides: Optional[Dict[str, str]] = None
+    input_payload: Optional[Dict[str, Any]] = None
     prompt: str = Field(min_length=1, max_length=6000)
     idempotency_key: Optional[str] = Field(default=None, max_length=128)
 

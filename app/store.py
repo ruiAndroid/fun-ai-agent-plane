@@ -12,6 +12,7 @@ class TaskRecord:
     agent_id: str
     workflow_id: Optional[str]
     skill_id: Optional[str]
+    input_payload: Dict[str, object]
     prompt: str
     status: TaskStatus
     skill_prompt_override: Optional[str] = None
@@ -65,6 +66,7 @@ class TaskStore:
         agent_id: str,
         workflow_id: Optional[str],
         skill_id: Optional[str],
+        input_payload: Optional[Dict[str, object]],
         prompt: str,
         skill_prompt_override: Optional[str],
         skill_prompt_overrides: Optional[Dict[str, str]],
@@ -91,6 +93,7 @@ class TaskStore:
                 agent_id=agent_id,
                 workflow_id=workflow_id,
                 skill_id=skill_id,
+                input_payload=input_payload or {},
                 prompt=prompt,
                 skill_prompt_override=skill_prompt_override,
                 skill_prompt_overrides=skill_prompt_overrides or {},
