@@ -1,0 +1,11 @@
+{
+  "agent_id": "dreamworks-novel-to-script",
+  "display_name": "梦工厂-小说转剧本",
+  "workflows": [],
+  "mcp_servers": [],
+  "metadata": {
+    "owner": "dreamworks",
+    "domain": "novel-to-script",
+    "stage": "scaffold"
+  }
+}
