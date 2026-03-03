@@ -237,7 +237,7 @@ class TaskExecutor:
             return f"[{runtime.agent.display_name}] Workflow produced empty output."
 
         lines: List[str] = []
-        lines.append(f"[{runtime.agent.display_name}] Storyboard Pipeline Result")
+        lines.append(f"[{runtime.agent.display_name}] Workflow Result")
         lines.append(f"Workflow: {runtime.workflow.workflow_id}")
         lines.append(f"Steps: {len(step_outputs)}")
         lines.append("")
