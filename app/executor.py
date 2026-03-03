@@ -347,6 +347,7 @@ class TaskExecutor:
     ) -> str:
         payload = task_record.input_payload or {}
         novel_content = str(payload.get("novel_content", "")).strip()
+        novel_type = str(payload.get("novel_type", "")).strip()
         target_audience = str(payload.get("target_audience", "")).strip()
         expected_episode_count = payload.get("expected_episode_count")
 
@@ -354,6 +355,8 @@ class TaskExecutor:
             novel_content = step_input.strip()
         if not target_audience:
             target_audience = "未指定"
+        if not novel_type:
+            novel_type = "未指定"
 
         episode_count_text = "未指定"
         if isinstance(expected_episode_count, int):
@@ -367,6 +370,7 @@ class TaskExecutor:
 
         lines = [
             f"[{display_name}] Novel Intake",
+            f"小说类型={novel_type}",
             f"受众={target_audience}",
             f"期望集数={episode_count_text}",
             f"小说内容长度={len(novel_content)}",
