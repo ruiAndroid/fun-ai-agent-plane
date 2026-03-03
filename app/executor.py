@@ -222,6 +222,7 @@ class TaskExecutor:
                     "step_name": runtime_step.step.name,
                     "skill_id": runtime_step.skill.skill_id,
                     "output_chars": len(step_output),
+                    "output": step_output,
                     "output_preview": self._preview(step_output),
                 },
             )
